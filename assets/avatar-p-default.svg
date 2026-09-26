@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#18132c"/>
+      <stop offset="60%" stop-color="#0e101d"/>
+      <stop offset="100%" stop-color="#07080e"/>
+    </radialGradient>
+
+    <!-- Glowing Square Border Gradient -->
+    <linearGradient id="squareGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+
+    <!-- 'P' Letter Gradient -->
+    <linearGradient id="letterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#e0e7ff"/>
+      <stop offset="70%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+
+    <!-- Inner Glow for Square -->
+    <linearGradient id="innerGlow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.04"/>
+    </linearGradient>
+
+    <!-- Neon Glow Filter -->
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur1"/>
+      <feGaussianBlur stdDeviation="14" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Subtle Drop Shadow -->
+    <filter id="letterShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#a855f7" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="200" height="200" rx="36" fill="url(#bgGrad)"/>
+
+  <!-- Subtle Ambient Core Glow behind letter -->
+  <circle cx="100" cy="100" r="55" fill="#a855f7" opacity="0.25" filter="url(#neonGlow)"/>
+
+  <!-- Glowing Square Outline -->
+  <!-- Ambient outer glow of square -->
+  <rect x="28" y="28" width="144" height="144" rx="28" fill="none" stroke="url(#squareGrad)" stroke-width="4" opacity="0.6" filter="url(#neonGlow)"/>
+  
+  <!-- Crisp inner square with glass fill -->
+  <rect x="28" y="28" width="144" height="144" rx="28" fill="url(#innerGlow)" stroke="url(#squareGrad)" stroke-width="3"/>
+
+  <!-- Architectural 'P' Logo Standing within the Square -->
+  <g filter="url(#letterShadow)">
+    <!-- Vertical Stem of 'P' -->
+    <rect x="66" y="52" width="18" height="96" rx="4" fill="url(#letterGrad)"/>
+
+    <!-- Bowl / Loop of 'P' -->
+    <!-- Outer Path of Loop -->
+    <path d="M 66,52 
+             L 106,52 
+             C 126,52 140,63 140,78 
+             C 140,93 126,104 106,104 
+             L 66,104 
+             Z" 
+          fill="url(#letterGrad)"/>
+
+    <!-- Inner Cutout of 'P' Loop -->
+    <path d="M 84,68 
+             L 104,68 
+             C 114,68 122,72 122,78 
+             C 122,84 114,88 104,88 
+             L 84,88 
+             Z" 
+          fill="#111424"/>
+  </g>
+
+  <!-- Modern Accent: Radiant Beacon Dot on P corner -->
+  <circle cx="138" cy="78" r="3.5" fill="#38bdf8" filter="url(#neonGlow)"/>
+  <circle cx="66" cy="146" r="3" fill="#ec4899" filter="url(#neonGlow)"/>
+</svg>

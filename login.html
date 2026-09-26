@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log In — The Platform</title>
+  <meta name="description" content="Sign in to your platform. Human-first digital commons with zero bots.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body.login-page-body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 20%, #1e1136 0%, #09090f 70%, #030305 100%);
+      padding: 1.5rem;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: #f1f5f9;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .login-glow-orb {
+      position: absolute;
+      width: 450px;
+      height: 450px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.25) 0%, rgba(56, 189, 248, 0.1) 60%, transparent 80%);
+      filter: blur(60px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .login-glow-orb.top-left { top: -100px; left: -100px; }
+    .login-glow-orb.bottom-right { bottom: -100px; right: -100px; }
+
+    .login-card {
+      width: 100%;
+      max-width: 460px;
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 2.5rem 2.2rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(168, 85, 247, 0.15);
+      position: relative;
+      z-index: 1;
+      animation: cardFadeIn 0.5s ease-out;
+    }
+
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .login-brand-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
+      margin-bottom: 1rem;
+      filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.6));
+    }
+
+    .login-title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.4rem 0;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .login-subtitle {
+      font-size: 0.9rem;
+      color: #94a3b8;
+      margin: 0;
+    }
+
+    .login-form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .login-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.45rem;
+    }
+
+    .login-input-wrap {
+      position: relative;
+    }
+
+    .login-input {
+      width: 100%;
+      background: rgba(10, 15, 29, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      padding: 0.8rem 1rem;
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+    }
+
+    .login-input:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+      background: rgba(15, 23, 42, 0.95);
+    }
+
+    .login-password-toggle {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 4px;
+    }
+
+    .login-password-toggle:hover {
+      color: #f8fafc;
+    }
+
+    .btn-login-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #a855f7 0%, #3b82f6 50%, #06b6d4 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      padding: 0.9rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px -4px rgba(168, 85, 247, 0.45);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .btn-login-submit:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px -4px rgba(168, 85, 247, 0.65);
+    }
+
+    .btn-login-submit:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+
+    .login-error-alert {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .login-success-alert {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .login-footer-links {
+      margin-top: 1.5rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .login-footer-links a {
+      color: #38bdf8;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .login-forgot-wrap {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: -0.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .login-forgot-link {
+      color: #38bdf8;
+      font-size: 0.82rem;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .login-forgot-link:hover {
+      color: #c084fc;
+      text-decoration: underline;
+    }
+
+    .forgot-section {
+      animation: fadeIn 0.3s ease;
+    }
+
+    .forgot-desc {
+      font-size: 0.88rem;
+      color: #94a3b8;
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+
+    .btn-back-login {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 1rem;
+      transition: color 0.15s;
+    }
+
+    .btn-back-login:hover {
+      color: #ffffff;
+    }
+
+    .email-inbox-preview {
+      margin-top: 1.5rem;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 14px;
+      padding: 1.2rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      animation: slideUp 0.35s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .inbox-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .inbox-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.03em;
+    }
+
+    .inbox-meta {
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      line-height: 1.4;
+      margin-bottom: 0.75rem;
+    }
+
+    .inbox-subject {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 0.5rem;
+    }
+
+    .inbox-cta-btn {
+      display: block;
+      background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+      color: #ffffff;
+      text-decoration: none;
+      text-align: center;
+      padding: 11px 16px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35);
+      transition: all 0.15s ease;
+      margin-top: 0.75rem;
+    }
+
+    .inbox-cta-btn:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body class="login-page-body">
+
+  <div class="login-glow-orb top-left"></div>
+  <div class="login-glow-orb bottom-right"></div>
+
+  <main class="login-card" role="main">
+    <div class="login-header">
+      <a href="/" class="login-brand-logo" title="Back to The Platform">
+        <svg viewBox="0 0 200 200" width="68" height="68" aria-label="The Platform Logo">
+          <defs>
+            <linearGradient id="loginSquareGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#38bdf8"/>
+              <stop offset="50%" stop-color="#a855f7"/>
+              <stop offset="100%" stop-color="#ec4899"/>
+            </linearGradient>
+            <linearGradient id="loginLetterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="100%" stop-color="#e0e7ff"/>
+            </linearGradient>
+            <filter id="loginSquareGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="8" result="blur"/>
+              <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+            </filter>
+          </defs>
+          <!-- Glowing Square Outline -->
+          <rect x="25" y="25" width="150" height="150" rx="34" fill="none" stroke="url(#loginSquareGrad)" stroke-width="12" stroke-linecap="round" filter="url(#loginSquareGlow)"/>
+          <rect x="25" y="25" width="150" height="150" rx="34" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.6"/>
+          <!-- Architectural 'P' Standing Inside -->
+          <path d="M 75 145 L 75 55 L 115 55 C 132 55 145 68 145 85 C 145 102 132 115 115 115 L 75 115" 
+                fill="none" stroke="url(#loginLetterGrad)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <h1 class="login-title">Log In to The Platform</h1>
+      <p class="login-subtitle">Human-first digital space with verified authenticity</p>
+    </div>
+
+    <!-- Feedback Alerts -->
+    <div id="loginErrorAlert" class="login-error-alert" role="alert">
+      <span>⚠️</span>
+      <span id="loginErrorText">Invalid credentials.</span>
+    </div>
+
+    <div id="loginSuccessAlert" class="login-success-alert" role="alert">
+      <span>✨</span>
+      <span id="loginSuccessText">Authenticated! Redirecting to your platform...</span>
+    </div>
+
+    <form id="loginForm" autocomplete="on">
+      <div class="login-form-group">
+        <label for="loginIdentifier" class="login-label">Enter your email</label>
+        <div class="login-input-wrap">
+          <input type="text" id="loginIdentifier" class="login-input" placeholder="Enter your email" required autocomplete="username">
+        </div>
+      </div>
+
+      <div class="login-form-group">
+        <label for="loginPassword" class="login-label">Enter your Password</label>
+        <div class="login-input-wrap">
+          <input type="password" id="loginPassword" class="login-input" placeholder="Enter your Password" required autocomplete="current-password">
+          <button type="button" class="login-password-toggle" id="togglePasswordBtn" title="Toggle password visibility">👁️</button>
+        </div>
+      </div>
+
+      <div class="login-forgot-wrap">
+        <a href="#forgot" id="forgotPasswordLink" class="login-forgot-link">Forgot your password?</a>
+      </div>
+
+      <button type="submit" id="submitLoginBtn" class="btn-login-submit">
+        <span>🔑</span>
+        <span>Log In to Platform</span>
+      </button>
+
+      <div class="login-footer-links">
+        <a href="/">← Return to The Platform</a>
+        <a href="/#create">Create New Platform</a>
+      </div>
+    </form>
+
+    <!-- Password Recovery Section -->
+    <div id="forgotPasswordSection" class="forgot-section" style="display: none;">
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Reset Your Password</h2>
+      <p class="forgot-desc">
+        Enter your email address below and we'll send you a password reset link to get back into your account.
+      </p>
+
+      <form id="forgotPasswordForm">
+        <div class="login-form-group">
+          <label for="recoveryEmail" class="login-label">Enter your email</label>
+          <div class="login-input-wrap">
+            <input type="email" id="recoveryEmail" class="login-input" placeholder="Enter your email" required autocomplete="email">
+          </div>
+        </div>
+
+        <button type="submit" id="submitRecoveryBtn" class="btn-login-submit">
+          <span>📬</span>
+          <span>Send Password Reset Link</span>
+        </button>
+
+        <div style="text-align: center;">
+          <button type="button" id="backToLoginBtn" class="btn-back-login">
+            ← Back to Log In
+          </button>
+        </div>
+      </form>
+
+      <!-- Simulated Inbound Email Card -->
+      <div id="inboxPreviewCard" class="email-inbox-preview" style="display: none;">
+        <div class="inbox-header">
+          <span class="inbox-badge">📬 INBOX NOTIFICATION</span>
+          <span style="font-size: 0.72rem; color: #94a3b8;">Just now</span>
+        </div>
+        <div class="inbox-meta">
+          <strong>From:</strong> The Platform &lt;security@theplatform.network&gt;<br>
+          <strong>To:</strong> <span id="inboxRecipientText"></span>
+        </div>
+        <div class="inbox-subject">Reset your password for The Platform</div>
+        <p style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 0.5rem;">
+          We received a request to reset your password. Click the link below to choose a new password:
+        </p>
+        <a href="#" id="inboxResetLink" class="inbox-cta-btn">
+          🔐 Click Link in Email to Reset Password →
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const identifierInput = document.getElementById('loginIdentifier');
+    const passwordInput = document.getElementById('loginPassword');
+    const submitBtn = document.getElementById('submitLoginBtn');
+    const toggleBtn = document.getElementById('togglePasswordBtn');
+    const errorAlert = document.getElementById('loginErrorAlert');
+    const errorText = document.getElementById('loginErrorText');
+    const successAlert = document.getElementById('loginSuccessAlert');
+    const successText = document.getElementById('loginSuccessText');
+
+    toggleBtn.addEventListener('click', () => {
+      const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      passwordInput.setAttribute('type', type);
+      toggleBtn.textContent = type === 'password' ? '👁️' : '🙈';
+    });
+
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const identifier = identifierInput.value.trim();
+      const password = passwordInput.value;
+
+      errorAlert.style.display = 'none';
+      successAlert.style.display = 'none';
+
+      if (!identifier || !password) {
+        errorText.textContent = 'Please enter both your email and password.';
+        errorAlert.style.display = 'flex';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>⏳</span><span>Verifying Credentials...</span>';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: identifier, password: password })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Authentication failed. Please verify credentials.');
+        }
+
+        // Store user session in localStorage with verified account
+        localStorage.setItem('theplatform_user', JSON.stringify(data.user));
+
+        successText.textContent = `Welcome back, ${data.user.name}! Redirecting to your platform...`;
+        successAlert.style.display = 'flex';
+
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 800);
+
+      } catch (err) {
+        errorText.textContent = err.message;
+        errorAlert.style.display = 'flex';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>🔑</span><span>Log In to Platform</span>';
+      }
+    });
+
+    // Password Recovery Handlers
+    const forgotLink = document.getElementById('forgotPasswordLink');
+    const forgotSection = document.getElementById('forgotPasswordSection');
+    const backToLoginBtn = document.getElementById('backToLoginBtn');
+    const forgotForm = document.getElementById('forgotPasswordForm');
+    const recoveryEmailInput = document.getElementById('recoveryEmail');
+    const submitRecoveryBtn = document.getElementById('submitRecoveryBtn');
+    const inboxPreviewCard = document.getElementById('inboxPreviewCard');
+    const inboxRecipientText = document.getElementById('inboxRecipientText');
+    const inboxResetLink = document.getElementById('inboxResetLink');
+    const pageTitle = document.querySelector('.login-title');
+
+    function showForgotPasswordView() {
+      form.style.display = 'none';
+      forgotSection.style.display = 'block';
+      errorAlert.style.display = 'none';
+      successAlert.style.display = 'none';
+      pageTitle.textContent = 'Password Recovery';
+      if (identifierInput.value.includes('@')) {
+        recoveryEmailInput.value = identifierInput.value;
+      }
+      recoveryEmailInput.focus();
+    }
+
+    function showLoginView() {
+      forgotSection.style.display = 'none';
+      form.style.display = 'block';
+      errorAlert.style.display = 'none';
+      successAlert.style.display = 'none';
+      pageTitle.textContent = 'Log In to The Platform';
+      history.replaceState(null, '', window.location.pathname);
+    }
+
+    forgotLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      showForgotPasswordView();
+    });
+
+    backToLoginBtn.addEventListener('click', () => {
+      showLoginView();
+    });
+
+    // Check URL hash
+    if (window.location.hash === '#forgot') {
+      showForgotPasswordView();
+    }
+
+    forgotForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = recoveryEmailInput.value.trim();
+      if (!email) return;
+
+      errorAlert.style.display = 'none';
+      successAlert.style.display = 'none';
+      submitRecoveryBtn.disabled = true;
+      submitRecoveryBtn.innerHTML = '<span>⏳</span><span>Sending Reset Link...</span>';
+
+      try {
+        const res = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to request password reset.');
+        }
+
+        successText.textContent = `A password reset link has been dispatched to ${email}!`;
+        successAlert.style.display = 'flex';
+
+        // Display simulated email inbox notification
+        if (data.reset_url) {
+          inboxRecipientText.textContent = email;
+          inboxResetLink.href = data.reset_url;
+          inboxPreviewCard.style.display = 'block';
+        }
+
+        submitRecoveryBtn.disabled = false;
+        submitRecoveryBtn.innerHTML = '<span>📬</span><span>Send Password Reset Link</span>';
+
+      } catch (err) {
+        errorText.textContent = err.message;
+        errorAlert.style.display = 'flex';
+        submitRecoveryBtn.disabled = false;
+        submitRecoveryBtn.innerHTML = '<span>📬</span><span>Send Password Reset Link</span>';
+      }
+    });
+  </script>
+</body>
+</html>

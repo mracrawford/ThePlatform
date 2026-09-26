@@ -1,0 +1,15 @@
+# Scratch and temporary testing files
+scratch/
+.system_generated/
+*.log
+__pycache__/
+*.pyc
+
+# System / OS
+.DS_Store
+Thumbs.db
+desktop.ini
+# Old local database copies (theplatform.db is the active one)
+database.db
+platform.db
+verify_messaging_banner.py

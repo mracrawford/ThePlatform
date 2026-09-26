@@ -1,0 +1,2752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Platform — Human-First Social Network</title>
+  <meta name="description" content="A human-first social network with safe dynamic auto-theming, visitor ambient audio, ad hominem defense shield, and mutual aid marketplace.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Ambient Audio "Doorbell" Consent Banner -->
+  <aside id="audioDoorbellBanner" class="doorbell-banner" aria-label="Ambient Page Theme Player">
+    <div class="doorbell-inner">
+      <div class="doorbell-info">
+        <div class="doorbell-pulse">
+          <span class="pulse-ring"></span>
+          <span class="music-icon">🎵</span>
+        </div>
+        <div class="doorbell-text">
+          <span class="doorbell-sub">NOW VISITING <strong id="doorbellHostHandle">@adam</strong>'s PLATFORM</span>
+          <h4 id="doorbellTrackTitle" class="doorbell-title">Tycho — Awake (Lo-fi Cyber Ambient)</h4>
+        </div>
+      </div>
+
+      <!-- Live Web Audio Visualizer Bar -->
+      <div class="waveform-mini" id="miniWaveform" title="Ambient Theme Visualizer">
+        <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+        <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+        <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+      </div>
+
+      <div class="doorbell-actions">
+        <button id="doorbellPlayBtn" class="btn btn-audio-play" aria-label="Play Host's Theme Music">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span id="doorbellPlayLabel">Play Music</span>
+        </button>
+        <button id="doorbellDismissBtn" class="btn btn-audio-dismiss" aria-label="Dismiss Audio Notification">
+          <svg class="btn-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <span>Mute / Dismiss</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Global Top Bar Navigation -->
+  <header class="top-nav" id="globalNav">
+    <div class="nav-left">
+      <a href="#" class="brand-link" id="brandLogoBtn" title="Reset to Home">
+        <span class="brand-p-logo-wrap">
+          <svg class="brand-p-logo-svg" viewBox="0 0 200 200" width="34" height="34" aria-hidden="true">
+            <defs>
+              <linearGradient id="navSquareGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#38bdf8"/>
+                <stop offset="50%" stop-color="#a855f7"/>
+                <stop offset="100%" stop-color="#ec4899"/>
+              </linearGradient>
+              <linearGradient id="navLetterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ffffff"/>
+                <stop offset="50%" stop-color="#c084fc"/>
+                <stop offset="100%" stop-color="#818cf8"/>
+              </linearGradient>
+            </defs>
+            <rect x="16" y="16" width="168" height="168" rx="36" fill="rgba(168, 85, 247, 0.15)" stroke="url(#navSquareGrad)" stroke-width="12"/>
+            <rect x="64" y="48" width="22" height="104" rx="4" fill="url(#navLetterGrad)"/>
+            <path d="M 64,48 L 114,48 C 138,48 152,60 152,78 C 152,96 138,108 114,108 L 64,108 Z" fill="url(#navLetterGrad)"/>
+            <path d="M 86,66 L 110,66 C 122,66 130,71 130,78 C 130,85 122,90 110,90 L 86,90 Z" fill="#0d111e"/>
+          </svg>
+        </span>
+        <span class="brand-name" id="currentBrandTitle">The Platform</span>
+      </a>
+    </div>
+
+    <!-- Universal Friend Discovery Search Engine -->
+    <div class="nav-center">
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input 
+          type="search" 
+          id="globalSearchInput" 
+          placeholder="Search by Name, Name & Location, Email, or Phone..." 
+          autocomplete="off"
+          aria-label="Search friends"
+        >
+        <div id="searchResultsDropdown" class="search-dropdown hidden"></div>
+      </div>
+    </div>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="nav-tabs" aria-label="Main Navigation">
+      <button id="navTabPlatforms" class="nav-tab-btn" data-tab="platforms">
+        <span class="nav-tab-icon">🪐</span> Platforms
+      </button>
+      <button id="navTabCommons" class="nav-tab-btn" data-tab="commons">
+        <span class="nav-tab-icon">🤝</span> The Commons
+        <span class="badge-mini">Mutual Aid</span>
+      </button>
+      <button id="navTabTopics" class="nav-tab-btn active" data-tab="topics">
+        <span class="nav-tab-icon">🔥</span> Topics &amp; Passions
+        <span class="badge-mini">Trending</span>
+      </button>
+      <button id="navTabCollectives" class="nav-tab-btn" data-tab="collectives">
+        <span class="nav-tab-icon">🏛️</span> Collectives
+        <span class="badge-mini">Guilds</span>
+      </button>
+      <button id="navTabHearths" class="nav-tab-btn" data-tab="hearths">
+        <span class="nav-tab-icon">🔥</span> Hearths
+        <span class="badge-mini">Live</span>
+      </button>
+      <!-- ADMIN-ONLY TAB: Hidden by default, revealed only when is_admin === 1 -->
+      <button id="navTabAntiBot" class="nav-tab-btn admin-only-tab hidden" data-tab="antibot" title="Restricted to Verified System Admins">
+        <span class="nav-tab-icon">🛡️</span> Anti-Bot Console
+        <span class="badge-admin">Admin Priv</span>
+      </button>
+    </nav>
+
+    <!-- Navigation Right: Friends, Messages, LAN, Notifications, Account -->
+    <div class="nav-right">
+      <!-- Friends List & Requests Button -->
+      <button id="navFriendsBtn" class="btn btn-secondary btn-sm nav-friends-btn" title="View Friends & Requests">
+        <span>👥 Friends</span>
+        <span id="navFriendsPendingBadge" class="friends-pending-badge hidden">0</span>
+      </button>
+
+      <!-- Private Messages with Friends Button -->
+      <button id="navMessagesBtn" class="btn btn-secondary btn-sm nav-messages-btn" title="Private Messages with Friends">
+        <span>💬 Messages</span>
+        <span id="navMessagesBadge" class="messages-unread-badge hidden">0</span>
+      </button>
+
+      <!-- Theme Audio Dropdown Trigger Button -->
+      <button id="navTopAudioToggleBtn" class="btn btn-secondary btn-sm nav-top-audio-toggle-btn" title="Theme Music Player (Click to drop down audio bar)" aria-label="Toggle Theme Music Dropdown Bar" aria-expanded="false">
+        <span class="nav-audio-icon">🎧</span>
+        <span class="nav-audio-label">Music</span>
+        <span id="navAudioWavePill" class="nav-audio-wave-pill hidden" aria-hidden="true">
+          <span class="nav-wave-bar"></span>
+          <span class="nav-wave-bar"></span>
+          <span class="nav-wave-bar"></span>
+        </span>
+      </button>
+
+      <!-- Mobile LAN View Indicator & Quick Link -->
+      <a id="navLanMobileLink" href="#" class="lan-access-pill" title="Click to view QR code / address to open on your mobile phone over local LAN">
+        <span class="lan-pulse-dot"></span>
+        <span id="navLanMobileText">📱 Mobile LAN: 10.0.0.55:3000</span>
+      </a>
+
+      <!-- Notifications Dropdown Tab at the Top -->
+      <div class="notifications-wrapper" style="position:relative;">
+        <button id="navNotificationsBtn" class="btn btn-secondary btn-sm nav-notifications-btn" title="Notifications & Mentions">
+          <span>🔔</span>
+          <span id="navNotificationsBadge" class="notifications-unread-badge hidden">0</span>
+        </button>
+        <div id="notificationsDropdown" class="notifications-dropdown hidden glass-panel">
+          <div class="notifications-header">
+            <h4>Notifications &amp; Mentions</h4>
+            <div class="notifications-header-actions">
+              <button type="button" id="markAllNotificationsReadBtn" class="btn-text-subtle">Mark all read</button>
+              <button type="button" id="closeNotificationsBtn" class="notifications-close-btn" title="Close notifications" aria-label="Close">✕</button>
+            </div>
+          </div>
+          <div id="notificationsList" class="notifications-list">
+            <div class="notifications-empty">No notifications yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Actions (Log In, Register, or Current Profile) -->
+        <a href="/login.html" id="navLoginBtn" class="btn btn-secondary btn-sm" title="Log in with your email or handle" style="text-decoration:none;">
+          <span>🔑 Log In</span>
+        </a>
+
+        <button id="navRegisterBtn" class="btn btn-primary btn-sm">
+          <span>✨ Create Your Platform</span>
+        </button>
+
+        <!-- Active User Profile Dropdown -->
+        <div class="user-chip-wrapper">
+          <div class="current-user-chip" id="currentUserChip" title="Click to view account options">
+            <img id="userChipAvatar" src="assets/avatar-p-default.svg" alt="User Avatar" class="user-chip-avatar">
+            <div class="user-chip-text">
+              <span id="userChipName" class="user-chip-name">Visitor</span>
+              <span id="userChipStatus" class="user-chip-status">
+                <span class="status-dot-green"></span>
+                <span id="userChipRoleText">Not Logged In</span>
+              </span>
+            </div>
+            <span class="chip-chevron">▾</span>
+          </div>
+
+          <!-- Account Dropdown Menu -->
+          <div class="user-dropdown-menu hidden" id="userDropdownMenu">
+            <div class="dropdown-header">
+              <span id="menuUserHandle" class="menu-handle">@visitor</span>
+              <span id="menuUserEmail" class="menu-email">Not authenticated</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="menuMyPlatformBtn">
+              <span>🪐 Go to My Platform</span>
+            </button>
+            <button class="dropdown-item" id="menuEditProfileBtn">
+              <span>✏️ Edit Profile &amp; Aesthetics</span>
+            </button>
+            <button class="dropdown-item" id="menuFeatureGuideBtn">
+              <span>✨ What's New / Feature Guide</span>
+            </button>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item danger" id="menuLogoutBtn">
+              <span>🚪 Log Out</span>
+            </button>
+          </div>
+        </div>
+    </div>
+  </header>
+
+  <!-- Top Dropdown Theme Audio Player Bar (Slides Down From Top Nav) -->
+  <aside id="topAudioDropdownBar" class="top-audio-dropdown-bar hidden" aria-label="Top Dropdown Theme Music Player">
+    <div class="top-audio-bar-inner">
+      <!-- Left: Rotating Vinyl Disc & Track Metadata -->
+      <div class="top-audio-meta-wrap">
+        <div class="top-audio-vinyl" id="topAudioVinylDisc">
+          <div class="top-audio-vinyl-center"></div>
+        </div>
+        <div class="top-audio-info">
+          <div class="top-audio-tag-row">
+            <span class="top-audio-tag">🎧 PLATFORM AUDIO</span>
+            <span id="topAudioTrackBadge" class="top-audio-track-badge">Track 1 of 3</span>
+          </div>
+          <h4 id="topAudioTrackTitle" class="top-audio-track-title">Capstan - Wax Poetic</h4>
+          <span id="topAudioTrackSubtitle" class="top-audio-track-subtitle">Theme Audio • Ready to Play</span>
+        </div>
+      </div>
+
+      <!-- Center: Big Glowing Controls & Fast 1-Tap Playlist Selector -->
+      <div class="top-audio-controls-center">
+        <div class="top-audio-playback-btns">
+          <button type="button" id="topAudioPrevBtn" class="top-audio-btn-nav" title="Previous Track (⏮)" aria-label="Previous Track">
+            <span>⏮</span>
+          </button>
+          <button type="button" id="topAudioPlayPauseBtn" class="top-audio-btn-play" title="Play or Pause Theme Audio" aria-label="Play or Pause">
+            <span id="topAudioPlayPauseIcon">▶</span>
+          </button>
+          <button type="button" id="topAudioNextBtn" class="top-audio-btn-nav" title="Next Track (⏭)" aria-label="Next Track">
+            <span>⏭</span>
+          </button>
+        </div>
+
+        <!-- 1-Tap Playlist Chips Switcher -->
+        <div id="topAudioPlaylistChips" class="top-audio-playlist-chips" role="tablist" aria-label="Quick Playlist Switcher">
+          <!-- Populated dynamically by JS -->
+        </div>
+      </div>
+
+      <!-- Right: Video View Toggle, Synth Mode & Close Button -->
+      <div class="top-audio-actions-right">
+        <button type="button" id="topAudioVideoToggleBtn" class="top-audio-action-btn" title="Show or Hide Embedded Player">
+          <span id="topAudioVideoToggleIcon">📺</span> <span id="topAudioVideoToggleLabel">Video</span>
+        </button>
+        <button type="button" id="topAudioSynthBtn" class="top-audio-action-btn" title="Toggle Calming Synth Chord Ambient Audio">
+          <span>🎹 Synth</span>
+        </button>
+        <button type="button" id="topAudioCloseBtn" class="top-audio-btn-close" title="Close Audio Bar (Slide Up)" aria-label="Close Top Audio Bar">
+          <span>✕</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Expandable Video Player Drawer for Mobile & Desktop -->
+    <div id="topAudioVideoDrawer" class="top-audio-video-drawer hidden">
+      <div class="top-audio-video-container">
+        <div class="top-audio-video-tip">
+          <span>📱 Mobile Streaming Tip: Tap the video if sound is muted by browser policy.</span>
+        </div>
+        <div id="topAudioPlayerHost" class="top-audio-player-host"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Profile Quick-Switcher Bar -->
+  <div class="platform-switcher-bar">
+    <div class="switcher-container">
+      <span class="switcher-label">EXPLORE PLATFORMS:</span>
+      <div class="user-switch-pills" id="platformPillsContainer">
+        <!-- Injected via JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <main id="appMain" class="main-content">
+    
+    <!-- VIEW 1: PLATFORM VIEW (Host's Page & Guestbook) -->
+    <section id="platformSection" class="view-section">
+      
+      <!-- Prominent AI / Example Account Notification Banner (Shown on synthetic accounts) -->
+      <div id="exampleAccountBanner" class="example-alert-banner hidden">
+        <div class="example-alert-content">
+          <span class="example-icon">🤖</span>
+          <div class="example-text">
+            <strong>STAND-IN AI &amp; EXAMPLE ACCOUNT:</strong>
+            <span>This profile is a synthetic demonstration account showcasing auto-theming, visitor dispatches, and ambient audio. It is not a real human member.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Host Platform Shell (Theme Variables Apply Dynamically Here) -->
+      <div class="platform-stage" id="platformStage">
+        
+        <!-- Hero Banner -->
+        <div class="banner-wrapper">
+          <div class="banner-image-container" id="bannerContainer">
+            <img id="hostBannerImg" src="assets/maya-banner.jpg" alt="Platform Banner" class="banner-image">
+            <div class="banner-scrim"></div>
+          </div>
+
+          <!-- Profile Card Overlay -->
+          <div class="profile-header-card">
+            <div class="profile-avatar-wrap">
+              <div class="avatar-main-frame">
+                <img id="hostAvatarImg" src="assets/avatar-p-cyber.svg" alt="Profile Picture" class="profile-avatar">
+                <span id="humanSealBadge" class="human-seal">✓ Human</span>
+              </div>
+
+              <!-- Multi-Photo Gallery & 1-Click Swapper Reel -->
+              <div class="avatar-reel-container" id="avatarReelContainer">
+                <div class="avatar-reel-header">
+                  <span class="reel-caption">Photo Reel:</span>
+                  <label for="reelUploadInput" class="btn-reel-add" id="reelUploadBtn" title="Upload another profile picture to your gallery">
+                    <span>+ Add Photo</span>
+                    <input type="file" id="reelUploadInput" accept="image/*" class="sr-only">
+                  </label>
+                </div>
+                <div class="avatar-reel-strip" id="avatarReelStrip">
+                  <!-- Rendered dynamically via JS -->
+                </div>
+              </div>
+            </div>
+
+            <div class="profile-meta-primary">
+              <div class="profile-name-row">
+                <h1 id="hostDisplayName" class="profile-name">Adam Crawford</h1>
+                <span id="hostHandle" class="profile-handle">@adam</span>
+                
+                <!-- Account Classification Tags -->
+                <span id="hostAccountTypeBadge" class="badge-account-type">Example AI Account</span>
+                <span id="hostPrivacyBadge" class="privacy-pill public">🌐 Public Platform</span>
+                <span id="hostAestheticBadge" class="aesthetic-pill">Cyber Neon</span>
+                <span id="hostZodiacBadge" class="zodiac-pill hidden" title="Astrological Zodiac Sign">✨ ♌ Leo</span>
+                <span id="hostCommonsVerifiedBadge" class="commons-verified-pill hidden" title="Verified for The Commons Mutual Aid">🛡️ Commons Verified</span>
+              </div>
+
+              <!-- Host Personal Motto / Statement (Max 15 words) -->
+              <div id="hostMottoBanner" class="host-motto-banner hidden" title="Personal Statement / Motto">
+                <span class="motto-quote-glyph">“</span>
+                <span id="hostMottoText" class="host-motto-text">Solidarity Forever ✊🌹</span>
+                <span class="motto-quote-glyph">”</span>
+              </div>
+
+              <!-- Top 3 Passions Featured Beside Profile Header (Strictly zero meritocracy/jobs) -->
+              <div class="profile-passions-section">
+                <span class="passions-eyebrow">CORE PASSIONS &amp; PURSUITS:</span>
+                <div id="profileTopPassions" class="profile-top-passions">
+                  <!-- Rendered via JS -->
+                </div>
+              </div>
+
+              <p id="hostBio" class="profile-bio">
+                Algorithmic audio designer & visual artist. Building human-first digital commons. Analog synths, 35mm film, open protocol enthusiast.
+              </p>
+              
+              <div class="profile-stats-row">
+                <span class="stat-item"><strong id="hostDispatchesCount">2</strong> Dispatches</span>
+                <span class="stat-item"><strong id="hostGuestbookCount">1</strong> Platform Notes</span>
+                <span class="stat-item"><strong id="hostMutualAidKarma">34</strong> Mutual Aid Karma ⭐</span>
+                <span class="stat-item" id="hostLocation">📍 San Francisco, CA</span>
+              </div>
+            </div>
+
+            <div class="profile-actions">
+              <!-- Message Friend Action Button (Visible if mutual friend) -->
+              <button id="hostMessageActionBtn" class="btn btn-primary host-message-btn hidden" title="Send a private message to this friend">
+                <span>💬 Message</span>
+              </button>
+
+              <!-- Friend Connection Action Button -->
+              <button id="hostFriendActionBtn" class="btn btn-secondary" title="Connect with this member">
+                <span id="hostFriendActionIcon">➕</span>
+                <span id="hostFriendActionText">Add Friend</span>
+              </button>
+
+              <!-- Edit Profile Button (Visible on own platform) -->
+              <button id="editPlatformBtn" class="btn btn-primary" title="Edit your platform aesthetics, passions, multiple avatars, and audio">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                <span>✏️ Edit Profile</span>
+              </button>
+
+              <button id="postToPlatformBtn" class="btn btn-primary" title="Leave a post on this creator's platform">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                <span id="postToPlatformBtnText">Post to Platform</span>
+              </button>
+              
+              <button id="sendGratitudeTipBtn" class="btn btn-outline" title="Send a voluntary gratitude tip to this member">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line></svg>
+                <span>Send Tip (Optional)</span>
+              </button>
+
+              <button id="privacyToggleBtn" class="btn btn-ghost" title="Toggle Public / Private profile demonstration">
+                <span id="privacyToggleLabel">Toggle Privacy</span>
+              </button>
+
+              <!-- 1-Click Platform Passport Portability -->
+              <button id="exportPassportBtn" class="btn btn-secondary" title="Export 100% of your data, dispatches, friends, and karma in a sovereign passport">
+                <span>🧳 Export Passport</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Platform Content Feeds: Host's Thoughts vs. Visitor Posts -->
+        <div class="platform-layout-grid">
+          
+          <!-- LEFT COLUMN: The Dual Feed -->
+          <div class="platform-content-column">
+            
+            <!-- Feed Tabs -->
+            <div class="feed-tabs-header">
+              <button id="feedTabDispatches" class="feed-tab-btn active" data-feed="dispatches">
+                <span class="tab-label">Host's Platform Thoughts</span>
+                <span class="tab-badge" id="dispatchesBadge">2</span>
+              </button>
+              <button id="feedTabGuestbook" class="feed-tab-btn" data-feed="guestbook">
+                <span class="tab-label">Posts on This Page</span>
+                <span class="tab-badge" id="guestbookBadge">1</span>
+              </button>
+            </div>
+
+            <!-- COMPOSER: Write to this Platform with Real-Time Ad Hominem Defense -->
+            <div class="composer-card" id="composerCard">
+              <div class="composer-header">
+                <img id="composerUserAvatar" src="assets/avatar-p-default.svg" alt="Active User" class="composer-avatar">
+                <div class="composer-prompt-text">
+                  <span class="composer-title" id="composerTitle">Post to Platform</span>
+                  <span class="composer-subtitle">Argue ideas fiercely; personal hostility triggers the Ad Hominem Shield.</span>
+                </div>
+              </div>
+
+              <!-- Interest Category & Scraped Sub-Topic Controls -->
+              <div class="composer-topic-bar">
+                <div class="composer-topic-select-wrap">
+                  <label for="composerInterestSelect" class="composer-topic-label">
+                    <span>🏷️ Interest / Topic:</span>
+                  </label>
+                  <select id="composerInterestSelect" class="composer-topic-select" title="Select the baseline interest or leave as Open Thought">
+                    <option value="" selected>💭 Open Thought (No Topic — Won't Trend)</option>
+                    <optgroup label="Physical Training &amp; Movement">
+                      <option value="Martial Arts">🥋 Martial Arts</option>
+                      <option value="Working Out">🏃 Working Out</option>
+                      <option value="Weightlifting">🏋️ Weightlifting</option>
+                      <option value="Yoga & Meditation">🧘 Yoga &amp; Meditation</option>
+                      <option value="Boxing & Combat">🥊 Boxing &amp; Combat</option>
+                      <option value="Running">👟 Running</option>
+                      <option value="Cycling">🚴 Cycling</option>
+                      <option value="Climbing & Bouldering">🧗 Climbing &amp; Bouldering</option>
+                      <option value="Swimming">🏊 Swimming</option>
+                      <option value="Hiking & Outdoors">🥾 Hiking &amp; Outdoors</option>
+                    </optgroup>
+                    <optgroup label="Mind, Studies &amp; Literature">
+                      <option value="Reading">📚 Reading</option>
+                      <option value="Studying">📖 Studying</option>
+                      <option value="Philosophy">💭 Philosophy</option>
+                      <option value="Science & Math">🔬 Science &amp; Math</option>
+                      <option value="History">🏺 History</option>
+                      <option value="Languages & Linguistics">🗣️ Languages &amp; Linguistics</option>
+                      <option value="Technology">💻 Technology</option>
+                      <option value="Astronomy">🔭 Astronomy</option>
+                      <option value="Architecture">🏛️ Architecture</option>
+                    </optgroup>
+                    <optgroup label="Arts, Music &amp; Crafts">
+                      <option value="Music">🎵 Music</option>
+                      <option value="Movies">🎬 Movies</option>
+                      <option value="Art & Design">🎨 Art &amp; Design</option>
+                      <option value="Writing">✍️ Writing</option>
+                      <option value="Poetry">📜 Poetry</option>
+                      <option value="Photography">📷 Photography</option>
+                      <option value="Woodworking">🪵 Woodworking</option>
+                      <option value="Crafts">🧶 Crafts</option>
+                      <option value="Gaming">🎮 Gaming</option>
+                    </optgroup>
+                    <optgroup label="Earth, Food &amp; Living">
+                      <option value="Baking">🍞 Baking</option>
+                      <option value="Cooking">🍳 Cooking</option>
+                      <option value="Gardening">🌿 Gardening</option>
+                      <option value="Coffee & Tea">☕ Coffee &amp; Tea</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div class="composer-subtopic-input-wrap">
+                  <label for="composerSubtopicInput" class="composer-topic-label">
+                    <span>Sub-Topic / Genre:</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    id="composerSubtopicInput" 
+                    class="composer-subtopic-input" 
+                    placeholder="e.g. 'Hardcore', 'Sci-Fi Noir', 'Sourdough' (auto-scraped to profile)" 
+                    title="Enter a specific sub-topic or genre. It will be automatically scraped into your profile sub-list."
+                  >
+                </div>
+
+                <!-- Visibility Selector (Public vs Friends Only) -->
+                <div class="composer-visibility-select-wrap">
+                  <label for="composerVisibilitySelect" class="composer-topic-label">
+                    <span>👁️ Visibility:</span>
+                  </label>
+                  <select id="composerVisibilitySelect" class="composer-topic-select" title="Choose who can see this post">
+                    <option value="public" selected>🌐 Public</option>
+                    <option value="friends">🔒 Friends Only</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Media Link URL (YouTube / Video / Discussion Link) -->
+              <div class="composer-media-url-wrap">
+                <span class="media-input-icon">🔗</span>
+                <input 
+                  type="url" 
+                  id="composerMediaUrlInput" 
+                  class="composer-media-input" 
+                  placeholder="Paste YouTube video or web link to discuss (embeds video player automatically)..."
+                >
+              </div>
+
+              <div class="composer-input-area">
+                <div class="composer-autocomplete-anchor" style="position:relative;">
+                  <textarea 
+                    id="composerTextarea" 
+                    rows="3" 
+                    placeholder="Share a thought, or type # to tag a recent post, or @ to mention a friend..."
+                    aria-label="Compose post"
+                  ></textarea>
+                  <!-- # Post Tagging Autocomplete Dropdown -->
+                  <div id="postMentionDropdown" class="mention-dropdown hidden glass-panel"></div>
+                  <!-- @ Friend Tagging Autocomplete Dropdown -->
+                  <div id="friendMentionDropdown" class="mention-dropdown hidden glass-panel"></div>
+                </div>
+
+                <!-- Tagged Post Reference Chip -->
+                <div id="taggedPostChipWrap" class="tagged-post-chip-wrap hidden">
+                  <span class="tagged-chip-icon">🔗 Tagged Post:</span>
+                  <span id="taggedPostChipTitle" class="tagged-chip-title"></span>
+                  <button type="button" id="removeTaggedPostBtn" class="btn-chip-remove" title="Remove post tag">✕</button>
+                </div>
+
+                <!-- Composer Media Attachment Preview (Image or GIF) -->
+                <div id="composerMediaPreview" class="composer-media-preview hidden">
+                  <div class="composer-preview-inner">
+                    <img id="composerPreviewImg" src="" alt="Attachment preview" class="composer-preview-img">
+                    <div class="composer-preview-meta">
+                      <span id="composerPreviewTypeBadge" class="composer-preview-badge">📷 Image Attachment</span>
+                      <span id="composerPreviewFileName" class="composer-preview-name">image.png</span>
+                    </div>
+                  </div>
+                  <button type="button" id="composerRemoveMediaBtn" class="btn-preview-remove" title="Remove attachment">✕ Remove</button>
+                </div>
+                
+                <!-- Real-Time Auto-Moderation Alert (Automatic, not a button) -->
+                <div id="composerModerationAlert" class="composer-moderation-alert hidden">
+                  <span class="mod-alert-icon">🛡️</span>
+                  <div class="mod-alert-content">
+                    <span class="mod-alert-title">Auto-Moderation Notice:</span>
+                    <span id="composerModAlertText" class="mod-alert-text">Targeted personal attacks are moderated away. Disagreements and heated idea debates ("that's stupid, dumb idea") are always allowed.</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Media Attachment Bar -->
+              <div class="composer-footer">
+                <div class="media-attachments-buttons">
+                  <label class="btn-attach" title="Attach photo from computer">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    <span>Import Image</span>
+                    <input type="file" id="attachPhotoInput" accept="image/*" class="sr-only">
+                  </label>
+
+                  <button type="button" id="composerGifBtn" class="btn-attach" title="Search and attach an animated GIF">
+                    <span class="gif-btn-badge">GIF</span>
+                    <span>GIF</span>
+                  </button>
+
+                  <label class="btn-attach" title="Attach short video (max 60 seconds)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                    <span>Short Video (≤60s)</span>
+                    <input type="file" id="attachVideoInput" accept="video/*" class="sr-only">
+                  </label>
+                  
+                  <span class="video-limit-tag">⏱️ 1-Min Max</span>
+                </div>
+
+                <div class="composer-submit-wrap">
+                  <button id="publishPostBtn" class="btn btn-primary">
+                    <span>Publish Note</span>
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Feed Post Items Container -->
+            <div class="posts-stream" id="postsStream">
+              <!-- Rendered via JavaScript -->
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: Host Sidebar -->
+          <aside class="platform-sidebar">
+            
+            <!-- Host's Theme Music Player Card (Supports 3-Track Ambient Playlist) -->
+            <div class="sidebar-card host-theme-player-card">
+              <div class="card-title-row">
+                <span class="card-icon">🎧</span>
+                <h3 class="card-title">Ambient Playlist</h3>
+                <span id="sidebarPlaylistBadge" class="badge-mini">Track 1 of 1</span>
+              </div>
+              <div class="theme-audio-box">
+                <div class="vinyl-disc-anim" id="vinylDisc">
+                  <div class="vinyl-center"></div>
+                </div>
+                <div class="theme-audio-details">
+                  <h4 id="sidebarTrackTitle" class="track-title">Ambient Theme</h4>
+                  <span class="track-source" id="sidebarTrackSource">Auto-plays next track in playlist</span>
+                  <div class="audio-control-bar">
+                    <button type="button" id="sidebarTrackPrevBtn" class="btn btn-sm btn-ghost" title="Previous Track">⏮️</button>
+                    <button type="button" id="sidebarAudioToggleBtn" class="btn btn-sm btn-primary">
+                      <span id="sidebarAudioPlayIcon">▶</span> <span id="sidebarAudioPlayText">Play Audio</span>
+                    </button>
+                    <button type="button" id="sidebarTrackNextBtn" class="btn btn-sm btn-ghost" title="Next Track">⏭️</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+
+            <!-- Host Mutual Aid Contributions Card -->
+            <div class="sidebar-card mutual-aid-summary-card">
+              <div class="card-title-row">
+                <span class="card-icon">🤝</span>
+                <h3 class="card-title">Community Reciprocity</h3>
+              </div>
+              <div class="karma-metric">
+                <span class="karma-score" id="sidebarKarmaScore">34</span>
+                <span class="karma-desc">Verified Mutual Aid Gifts Provided</span>
+              </div>
+              <button id="viewCommonsFromProfileBtn" class="btn btn-sm btn-secondary w-full">
+                Explore The Commons Marketplace →
+              </button>
+            </div>
+
+            <!-- Host Community Friends Card -->
+            <div class="sidebar-card host-friends-sidebar-card" id="sidebarFriendsCard">
+              <div class="card-title-row">
+                <span class="card-icon">👥</span>
+                <h3 class="card-title">Friends &amp; Relations</h3>
+                <span class="badge-mini" id="sidebarFriendsCountBadge">0</span>
+              </div>
+              <div class="sidebar-friends-grid" id="sidebarFriendsList">
+                <!-- Dynamically rendered friends -->
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: THE COMMONS (Mutual Aid Marketplace) -->
+    <section id="commonsSection" class="view-section">
+      <div class="commons-stage">
+        <div class="commons-header">
+          <div class="commons-title-block">
+            <div class="commons-badge">GIFT ECONOMY &amp; RECIPROCITY</div>
+            <h1 class="commons-title">The Commons Marketplace</h1>
+            <p class="commons-subtitle">
+              Offer goods and services freely, ask for what you need, and send voluntary gratitude tips.
+              <strong class="highlight-rule">No mandatory fees. Strict limit of 1 active need per user.</strong>
+            </p>
+          </div>
+
+          <div class="commons-quota-card" id="userAidQuotaCard">
+            <div class="quota-header">
+              <span class="quota-icon">⚖️</span>
+              <span class="quota-title">Your Aid Quota</span>
+            </div>
+            <div class="quota-body">
+              <p>Active Needs: <strong id="activeRequestCount">0 / 1 (Available)</strong></p>
+            </div>
+            <button id="openNewAidModalBtn" class="btn btn-primary btn-sm">
+              + Post New Offer or Request
+            </button>
+            <button id="openProximityRadarBtn" class="btn btn-secondary btn-sm" title="Open Privacy-Preserving Mutual Aid Radar">
+              <span>📍 Proximity Radar</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="commons-filter-bar">
+          <div class="filter-pills">
+            <button class="filter-pill active" data-filter="all">All Listings</button>
+            <button class="filter-pill" data-filter="offer">🎁 Offers &amp; Gifts</button>
+            <button class="filter-pill" data-filter="request">🆘 Community Needs</button>
+            <button class="filter-pill" data-filter="skills">🛠️ Skills &amp; Services</button>
+            <button class="filter-pill" data-filter="food">🍞 Food &amp; Garden</button>
+          </div>
+
+          <div class="commons-search-wrap">
+            <input type="text" id="commonsSearchInput" placeholder="Filter goods or skills..." class="commons-search">
+          </div>
+        </div>
+
+        <!-- Marketplace Cards Grid -->
+        <div class="commons-grid" id="commonsGrid">
+          <!-- Rendered via JavaScript -->
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: TOPICS & PASSIONS (Trending Passions & Curated Feed) -->
+    <section id="topicsSection" class="view-section active">
+      <div class="topics-stage">
+        
+        <!-- Topics Header -->
+        <div class="topics-header">
+          <div class="topics-title-block">
+            <div class="topics-badge">🔥 TRENDING PASSIONS &amp; PURSUITS</div>
+            <h1 class="topics-title">Topics &amp; Passions Feed</h1>
+            <p class="topics-subtitle">
+              Curated discussions and thoughts across creative pursuits. Ranked by organic engagement (likes &amp; views) from community platforms.
+              <strong>Cards display the top-level topic and teaser — click to expand the full discussion and comment.</strong>
+            </p>
+          </div>
+
+          <div class="topics-actions-header">
+            <button id="topicsViewSavedToggleBtn" class="btn btn-secondary btn-sm" title="Show only your saved / bookmarked dispatches">
+              <span id="savedToggleIcon">🔖</span> <span id="savedToggleLabel">Saved Posts</span>
+            </button>
+            <button id="topicsRefreshBtn" class="btn btn-secondary btn-sm" title="Refresh trending discussions">
+              <span>🔄 Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Controls Bar -->
+        <div class="topics-filter-bar">
+          <div class="topics-pills-row" id="topicsInterestPills">
+            <button class="topic-pill active" data-interest="all">🌟 All Topics</button>
+            <button class="topic-pill" data-interest="my-passions">✨ My Passions</button>
+            <button class="topic-pill" data-interest="Martial Arts">🥋 Martial Arts</button>
+            <button class="topic-pill" data-interest="Working Out">🏃 Working Out</button>
+            <button class="topic-pill" data-interest="Weightlifting">🏋️ Weightlifting</button>
+            <button class="topic-pill" data-interest="Reading">📚 Reading</button>
+            <button class="topic-pill" data-interest="Studying">📖 Studying</button>
+            <button class="topic-pill" data-interest="Music">🎵 Music</button>
+            <button class="topic-pill" data-interest="Movies">🎬 Movies</button>
+            <button class="topic-pill" data-interest="Baking">🍞 Baking</button>
+            <button class="topic-pill" data-interest="Writing">✍️ Writing</button>
+            <button class="topic-pill" data-interest="Philosophy">💭 Philosophy</button>
+            <button class="topic-pill" data-interest="Art & Design">🎨 Art &amp; Design</button>
+            <button class="topic-pill" data-interest="Technology">💻 Technology</button>
+            <button class="topic-pill" data-interest="Gardening">🌿 Gardening</button>
+            <button class="topic-pill" data-interest="Yoga & Meditation">🧘 Yoga</button>
+            <button class="topic-pill" data-interest="Hiking & Outdoors">🥾 Outdoors</button>
+            <button class="topic-pill" data-interest="Science & Math">🔬 Science</button>
+            <button class="topic-pill" data-interest="Photography">📷 Photography</button>
+            <button class="topic-pill" data-interest="Gaming">🎮 Gaming</button>
+          </div>
+
+          <div class="topics-subfilter-row">
+            <div class="topics-select-group">
+              <label for="topicsSubtopicFilter" class="filter-label">🏷️ Sub-Topic:</label>
+              <select id="topicsSubtopicFilter" class="form-select form-select-sm">
+                <option value="">All Sub-Topics</option>
+              </select>
+            </div>
+
+            <div class="topics-select-group">
+              <label for="topicsSortSelect" class="filter-label">📊 Ranking:</label>
+              <select id="topicsSortSelect" class="form-select form-select-sm">
+                <option value="trending">🔥 Trending (Engagement: Views &amp; Likes)</option>
+                <option value="likes">⭐ Most Liked</option>
+                <option value="views">👀 Most Viewed</option>
+                <option value="recent">🕒 Most Recent</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scrollable Feed: Only top-level topics shown initially; click to expand comments and media -->
+        <div class="topics-feed-container" id="topicsFeedContainer">
+          <div class="topics-feed-list" id="topicsFeedList">
+            <!-- Dynamically rendered via app.js -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- VIEW 3: ANTI-BOT & SYBIL DEFENSE (RESTRICTED ADMIN CONSOLE) -->
+    <section id="antiBotSection" class="view-section">
+      <div class="admin-stage">
+        
+        <!-- Admin Console Header -->
+        <div class="admin-header-row">
+          <div>
+            <div class="admin-badge">RESTRICTED: SYSTEM ADMIN PRIVILEGES ACTIVE</div>
+            <h1 class="admin-title">Anti-Bot &amp; Sybil Defense Command Center</h1>
+            <p class="admin-subtitle">
+              Real-time inspection of user signups, heuristic bot scoring, automated headless browser detection, and instant IP / account ban controls.
+            </p>
+          </div>
+          <div class="admin-status-chip">
+            <span class="status-pulse-red"></span>
+            <span>Live Heuristics Monitor</span>
+          </div>
+        </div>
+
+        <!-- Live Metrics Cards -->
+        <div class="admin-stats-grid">
+          <div class="admin-stat-card">
+            <span class="stat-num" id="totalSignupsCount">0</span>
+            <span class="stat-label">Total Signups Inspected</span>
+          </div>
+          <div class="admin-stat-card warning">
+            <span class="stat-num" id="flaggedBotsCount">0</span>
+            <span class="stat-label">Flagged High-Risk Bots (Score ≥ 0.70)</span>
+          </div>
+          <div class="admin-stat-card danger">
+            <span class="stat-num" id="bannedIpsCount">0</span>
+            <span class="stat-label">Blacklisted IP Addresses</span>
+          </div>
+          <div class="admin-stat-card success">
+            <span class="stat-num" id="verifiedHumansCount">0</span>
+            <span class="stat-label">Hardware-Verified Humans</span>
+          </div>
+        </div>
+
+        <!-- Real-Time User Signups & Bot Triage Table -->
+        <div class="admin-table-card">
+          <div class="table-header-row">
+            <h2 class="table-heading">User Signups &amp; Bot Heuristic Telemetry</h2>
+            <button id="refreshAdminDataBtn" class="btn btn-sm btn-secondary">
+              🔄 Refresh Live Telemetry
+            </button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="admin-table" id="signupsTable">
+              <thead>
+                <tr>
+                  <th>User / Handle</th>
+                  <th>IP Address</th>
+                  <th>Bot Risk Score</th>
+                  <th>Heuristic Flags</th>
+                  <th>Entropy</th>
+                  <th>Admin Priv</th>
+                  <th>Status &amp; Actions</th>
+                </tr>
+              </thead>
+              <tbody id="signupsTableBody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Off-Topic Flagged Posts Moderation Queue (3+ Flags) -->
+        <div class="admin-table-card" style="margin-top: 2rem;">
+          <div class="table-header-row">
+            <div>
+              <h2 class="table-heading">🚩 Off-Topic Flagged Posts Moderation Queue</h2>
+              <p class="admin-subcard-sub" style="margin:0; font-size:0.85rem; color:var(--text-secondary);">Posts reported by the community with 3 or more flags. Admins can delete or re-classify topic.</p>
+            </div>
+            <button id="refreshAdminFlaggedBtn" class="btn btn-sm btn-secondary">
+              🔄 Refresh Flagged Queue
+            </button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="admin-table" id="adminFlaggedTable">
+              <thead>
+                <tr>
+                  <th>Post ID / Author</th>
+                  <th>Topic &amp; Subtopic</th>
+                  <th>Flags</th>
+                  <th>Content Snippet</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminFlaggedTableBody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Blacklisted IPs & Audit Log Grid -->
+        <div class="admin-two-col-grid">
+          <!-- Banned IPs -->
+          <div class="admin-subcard">
+            <h3 class="subcard-title">🚫 Blacklisted IP Addresses</h3>
+            <p class="subcard-sub">IPs blocked from all read/write actions on The Platform.</p>
+            <div id="bannedIpsList" class="banned-ips-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Audit Log Feed -->
+          <div class="admin-subcard">
+            <h3 class="subcard-title">📜 Admin Action Audit Log</h3>
+            <p class="subcard-sub">Cryptographically sequenced record of all security interventions.</p>
+            <div id="auditLogList" class="audit-log-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- VIEW 4: COLLECTIVES & GUILDS (Democratic Self-Governing Associations) -->
+    <section id="collectivesSection" class="view-section">
+      <div class="collectives-stage">
+        <div class="collectives-header">
+          <div class="collectives-title-block">
+            <div class="collectives-badge">DEMOCRATIC ASSOCIATIONS &amp; GUILDS</div>
+            <h1 class="collectives-title">Community Collectives</h1>
+            <p class="collectives-subtitle">
+              Self-governing, member-moderated associations pooling mutual aid karma, shared tools, and sovereign technology.
+              <strong class="highlight-rule">Solidarity over hierarchy. 1 human = 1 sovereign voice.</strong>
+            </p>
+          </div>
+          <button id="openCreateCollectiveModalBtn" class="btn btn-primary">
+            + Found a New Collective
+          </button>
+        </div>
+
+        <!-- Filter Pills -->
+        <div class="collectives-filter-bar">
+          <div class="filter-pills" id="collectivesFilterPills">
+            <button class="filter-pill active" data-cat="all">All Collectives</button>
+            <button class="filter-pill" data-cat="Mutual Aid">🤝 Mutual Aid</button>
+            <button class="filter-pill" data-cat="Technology">⚡ Technology</button>
+            <button class="filter-pill" data-cat="Ecology & Food">🌿 Ecology &amp; Food</button>
+            <button class="filter-pill" data-cat="Art & Music">🎸 Art &amp; Music</button>
+          </div>
+        </div>
+
+        <!-- Collectives Grid -->
+        <div class="collectives-grid" id="collectivesGrid">
+          <!-- Rendered dynamically via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 5: FIRESIDE HEARTHS (Ephemeral Audio Lounges) -->
+    <section id="hearthsSection" class="view-section">
+      <div class="hearths-stage">
+        <div class="hearths-header">
+          <div class="hearths-title-block">
+            <div class="hearths-badge">EPHEMERAL AUDIO SPACES</div>
+            <h1 class="hearths-title">Fireside Hearths 🔥</h1>
+            <p class="hearths-subtitle">
+              Spontaneous, real-time voice lounges for 4–8 verified humans. No recordings, zero algorithmic surveillance, pure warmth.
+            </p>
+          </div>
+        </div>
+
+        <!-- Active Hearth Stage (When inside a room) -->
+        <div id="activeHearthStage" class="active-hearth-stage hidden">
+          <div class="hearth-room-banner">
+            <div class="hearth-room-meta">
+              <span id="activeHearthEmoji" class="hearth-room-emoji">🔥</span>
+              <div>
+                <h2 id="activeHearthName" class="hearth-room-title">Solidarity &amp; Philosophy Hearth</h2>
+                <p id="activeHearthTopic" class="hearth-room-topic">Human-first technology, mutual aid &amp; ethics</p>
+              </div>
+            </div>
+            <button type="button" id="leaveHearthBtn" class="btn btn-danger btn-sm">Leave Hearth</button>
+          </div>
+
+          <!-- Circular Seating Stage for Participants -->
+          <div class="hearth-campfire-container">
+            <div class="campfire-glow-core">
+              <div class="flame-particles"></div>
+              <span class="campfire-icon">🔥</span>
+            </div>
+            <div class="hearth-occupants-circle" id="hearthOccupantsCircle">
+              <!-- Occupant avatar seats rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Hearth Controls Bar -->
+          <div class="hearth-controls-bar">
+            <button type="button" id="hearthMicToggleBtn" class="btn btn-secondary">
+              <span id="hearthMicIcon">🎤</span> <span id="hearthMicText">Unmute Mic</span>
+            </button>
+            <button type="button" id="hearthFireCrackleBtn" class="btn btn-ghost" title="Toggle Calming Fireplace Audio">
+              <span>🪵 Fireplace Ambient Audio</span>
+            </button>
+            <div class="hearth-reaction-pills">
+              <button class="btn-hearth-react" data-react="🔥">🔥</button>
+              <button class="btn-hearth-react" data-react="☕">☕</button>
+              <button class="btn-hearth-react" data-react="👏">👏</button>
+              <button class="btn-hearth-react" data-react="❤️">❤️</button>
+              <button class="btn-hearth-react" data-react="🌿">🌿</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hearths Browse Rooms Grid (When not in a room) -->
+        <div id="browseHearthsView" class="hearths-browse-grid">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL: REGISTRATION / CREATE YOUR PLATFORM -->
+  <dialog id="registerModal" class="system-modal" aria-labelledby="registerModalTitle">
+    <div class="modal-card modal-lg">
+      <div class="modal-icon-badge">
+        <span>✨</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">JOIN THE PLATFORM</span>
+        <h2 id="registerModalTitle" class="modal-heading">Create Your Human Platform</h2>
+        <p class="modal-text">
+          Set up your personal space. The first registered user is automatically established as <strong>Root Admin</strong>.
+        </p>
+
+        <!-- Live Human Entropy Tracker Bar -->
+        <div class="entropy-meter-box">
+          <div class="entropy-header">
+            <span>🛡️ Live Human Behavioral Entropy:</span>
+            <strong id="liveEntropyDisplay">100% (Natural Jitter Detected)</strong>
+          </div>
+          <div class="entropy-bar-track">
+            <div id="entropyBarFill" class="entropy-bar-fill" style="width: 100%;"></div>
+          </div>
+          <span class="entropy-note">Your natural typing and mouse dynamics verify you as an authentic human.</span>
+        </div>
+
+        <form id="registrationForm" onsubmit="return false;">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="regName" class="form-label">Full Name / Display Name *</label>
+              <input type="text" id="regName" class="form-input" placeholder="e.g. Adam" required>
+            </div>
+            <div class="form-group">
+              <label for="regHandle" class="form-label">Unique Handle *</label>
+              <input type="text" id="regHandle" class="form-input" placeholder="e.g. @adam" required>
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="regEmail" class="form-label">Email Address *</label>
+              <input type="email" id="regEmail" class="form-input" placeholder="you@domain.com" required autocomplete="email">
+            </div>
+            <div class="form-group">
+              <label for="regPassword" class="form-label">Password *</label>
+              <input type="password" id="regPassword" class="form-input" placeholder="Create a secure password" required autocomplete="new-password">
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="regLocation" class="form-label">Location (City, State / Region)</label>
+              <input type="text" id="regLocation" class="form-input" placeholder="e.g. San Francisco, CA">
+            </div>
+            <div class="form-group">
+              <label for="regPhone" class="form-label">Mobile Phone Number (Optional)</label>
+              <input type="tel" id="regPhone" class="form-input" placeholder="555-019-8234">
+            </div>
+          </div>
+
+          <!-- Date of Birth & Show Zodiac Checkbox (Strictly NO Gender Asked) -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="regDob" class="form-label">Date of Birth *</label>
+              <input type="date" id="regDob" class="form-input" required>
+              <span class="form-label-hint">Age verified for human commons (18+)</span>
+            </div>
+            <div class="form-group" style="display:flex; flex-direction:column; justify-content:center;">
+              <label class="checkbox-container" style="margin-top:1.1rem; cursor:pointer;">
+                <input type="checkbox" id="regShowZodiac" checked>
+                <span class="checkbox-label-text">✨ Show zodiac on profile?</span>
+              </label>
+              <span class="form-label-hint" id="regZodiacPreview" style="color:var(--theme-primary); font-weight:700; margin-top:4px;"></span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="regBio" class="form-label">Short Bio (Artistic &amp; Creative Focus — Zero Meritocracy)</label>
+            <textarea id="regBio" rows="2" class="form-textarea" placeholder="Describe your passions, creative crafts, mutual aid gifts, or philosophical perspectives..."></textarea>
+          </div>
+
+          <!-- Personal Blurb / Motto (Max 15 words) with Live Word Counter & Emoji Support -->
+          <div class="form-group">
+            <label for="regMotto" class="form-label">
+              Personal Motto / Statement / Blurb
+              <span class="form-label-hint">(e.g. "Solidarity Forever ✊🌹" — strictly limited to 15 words)</span>
+            </label>
+            <input type="text" id="regMotto" class="form-input" placeholder='e.g. Solidarity Forever ✊🌹' maxlength="160">
+            <div class="motto-counter-bar">
+              <span class="motto-counter-text" id="regMottoCounter">0 / 15 words</span>
+              <span class="motto-emojis-badge">Emojis &amp; Symbols Supported ✊🌹✨</span>
+            </div>
+          </div>
+
+          <!-- Passions & Interests Selector Box (Opens Pregenerated Passions Popup) -->
+          <div class="form-group">
+            <label class="form-label">
+              Passions &amp; Artistic Pursuits *
+              <span class="form-label-hint">(Top 3 will be featured prominently beside your profile)</span>
+            </label>
+            <div id="regPassionsTriggerBox" class="passions-trigger-box" tabindex="0" role="button" aria-haspopup="dialog" title="Click to choose from pregenerated passions">
+              <div id="regPassionsChipsContainer" class="passions-chips-list">
+                <span class="passion-empty-placeholder">✨ Click here to choose your passions from pregenerated lists (Analog Synths, Permaculture, Film Photography, etc.)...</span>
+              </div>
+              <span class="btn-select-passions">Select Passions ▾</span>
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="regYoutubeUrl" class="form-label label-with-tooltip">
+                <span>YouTube Theme Audio URL</span>
+                <span class="info-tooltip-wrap" tabindex="0">
+                  <span class="tooltip-icon">ℹ️</span>
+                  <span class="tooltip-bubble">
+                    <strong>Ambient Doorbell Audio:</strong> Copy and paste any YouTube video URL. When guests arrive at your Platform, they will be greeted with a doorbell consent prompt to stream the audio from your chosen video while browsing your thoughts and offerings.
+                  </span>
+                </span>
+              </label>
+              <input type="url" id="regYoutubeUrl" class="form-input" placeholder="https://www.youtube.com/watch?v=...">
+            </div>
+            <div class="form-group">
+              <label for="regMusicTitle" class="form-label">Audio Track Title Display</label>
+              <input type="text" id="regMusicTitle" class="form-input" placeholder="e.g. Tycho — Awake (Ambient)">
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="regPrivacy" class="form-label">Platform Privacy</label>
+              <select id="regPrivacy" class="form-select">
+                <option value="public" selected>🌐 Public Platform (Anyone can visit)</option>
+                <option value="private">🔒 Private Platform (Approved friends only)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="regAesthetic" class="form-label">Aesthetic Vibe &amp; Typography</label>
+              <select id="regAesthetic" class="form-select">
+                <option value="Modernist">Modernist Neo-Grotesque (Plus Jakarta)</option>
+                <option value="Warm Vintage">Warm Analog Vintage (Playfair Serif)</option>
+                <option value="Lush Botanical">Lush Botanical (Outfit)</option>
+                <option value="Cyber Neon">Cyber Neon (Inter / Mono)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">
+                Platform Avatar Placeholder
+                <span class="form-label-hint">(Glowing 'P' square logo; add personal photos later in profile reel)</span>
+              </label>
+              <div class="avatar-pick-row">
+                <label class="avatar-option" title="Prismatic Core 'P'">
+                  <input type="radio" name="avatarChoice" value="assets/avatar-p-default.svg" checked>
+                  <img src="assets/avatar-p-default.svg" alt="Prismatic 'P' Logo">
+                </label>
+                <label class="avatar-option" title="Cyber Neon 'P'">
+                  <input type="radio" name="avatarChoice" value="assets/avatar-p-cyber.svg">
+                  <img src="assets/avatar-p-cyber.svg" alt="Cyber Neon 'P' Logo">
+                </label>
+                <label class="avatar-option" title="Warm Amber 'P'">
+                  <input type="radio" name="avatarChoice" value="assets/avatar-p-amber.svg">
+                  <img src="assets/avatar-p-amber.svg" alt="Warm Amber 'P' Logo">
+                </label>
+                <label class="avatar-option" title="Emerald Botanical 'P'">
+                  <input type="radio" name="avatarChoice" value="assets/avatar-p-emerald.svg">
+                  <img src="assets/avatar-p-emerald.svg" alt="Emerald Botanical 'P' Logo">
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Cover Banner</label>
+              <div class="banner-pick-row">
+                <label class="banner-option">
+                  <input type="radio" name="bannerChoice" value="assets/maya-banner.jpg" checked>
+                  <img src="assets/maya-banner.jpg" alt="Cyber">
+                </label>
+                <label class="banner-option">
+                  <input type="radio" name="bannerChoice" value="assets/julian-banner.jpg">
+                  <img src="assets/julian-banner.jpg" alt="Vintage">
+                </label>
+                <label class="banner-option">
+                  <input type="radio" name="bannerChoice" value="assets/elena-banner.jpg">
+                  <img src="assets/elena-banner.jpg" alt="Botanical">
+                </label>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="submitRegisterBtn" class="btn btn-primary">
+          🚀 Complete Registration &amp; Launch My Platform
+        </button>
+        <button id="cancelRegisterBtn" class="btn btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: THE AD HOMINEM SHIELD WARNING (Pre-Flight Interstitial) -->
+  <dialog id="adHominemModal" class="system-modal" aria-labelledby="adHominemModalTitle">
+    <div class="modal-card warning-tone">
+      <div class="modal-icon-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">THE PLATFORM MODERATION SYSTEM</span>
+        <h2 id="adHominemModalTitle" class="modal-heading">Tone Warning: Ad Hominem Detected</h2>
+        
+        <p class="modal-text">
+          Your post appears to attack the person directly rather than challenging their idea:
+        </p>
+
+        <div class="flagged-quote-box">
+          <span class="quote-tag">FLAGGED EXCERPT:</span>
+          <p id="flaggedQuoteText" class="flagged-snippet">"..."</p>
+        </div>
+
+        <div class="policy-callout">
+          <span class="policy-icon">💡</span>
+          <div class="policy-text">
+            <strong>Our Philosophy:</strong> On The Platform, <em>ideas</em> can be argued and dissected with fierce passion. 
+            However, insults aimed at a member's character, intelligence, or appearance trigger community strikes.
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="modalReviseBtn" class="btn btn-primary">
+          ✏️ Edit &amp; Refocus on the Idea
+        </button>
+        <button id="modalDismissBtn" class="btn btn-ghost">
+          Cancel Draft
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: MOBILE LAN VIEW -->
+  <dialog id="lanMobileModal" class="system-modal" aria-labelledby="lanMobileModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge" style="background: linear-gradient(135deg, #10b981, #06b6d4);">
+        <span>📱</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">LOCAL NETWORK HOSTING</span>
+        <h2 id="lanMobileModalTitle" class="modal-heading">Open on Your Mobile Device</h2>
+        <p class="modal-text">
+          Your server is hosted live across your local Wi-Fi / LAN! Connect your phone to the same Wi-Fi and open this URL in your mobile browser:
+        </p>
+
+        <div class="lan-address-box">
+          <input type="text" id="lanUrlInput" readonly value="http://10.0.0.55:3000" class="lan-url-display">
+          <button type="button" id="copyLanUrlBtn" class="btn btn-primary btn-sm">📋 Copy Link</button>
+        </div>
+
+        <div class="lan-qr-container" style="text-align: center; margin: 16px 0;">
+          <img id="lanQrCodeImg" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http%3A%2F%2F10.0.0.55%3A3000" alt="Scan QR code with phone" style="border-radius: 12px; border: 4px solid rgba(255,255,255,0.1); width: 160px; height: 160px;">
+          <p style="font-size: 0.76rem; color: var(--theme-text-dim); margin-top: 6px;">Point your phone camera at the QR code to open instantly</p>
+        </div>
+
+        <div class="policy-callout">
+          <span class="policy-icon">📶</span>
+          <div class="policy-text">
+            <strong>Network Tip:</strong> Ensure your phone is connected to the same local Wi-Fi network as this computer. All instant messaging, voice notes, photos, and profiles work natively!
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="closeLanModalBtn" class="btn btn-secondary">
+          Close
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: VOLUNTARY GRATITUDE TIP -->
+  <dialog id="tipModal" class="system-modal" aria-labelledby="tipModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge tip-accent">
+        <span>💝</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">COMMUNITY MUTUAL AID</span>
+        <h2 id="tipModalTitle" class="modal-heading">Send Voluntary Gratitude Tip</h2>
+        
+        <p class="modal-text">
+          You are sending appreciation to <strong id="tipRecipientName">Member</strong>.
+        </p>
+
+        <div class="tip-preset-row">
+          <button class="tip-pill-btn" data-amount="1">$1 Coffee</button>
+          <button class="tip-pill-btn active" data-amount="3">$3 Warm Meal</button>
+          <button class="tip-pill-btn" data-amount="5">$5 Solidarity</button>
+          <button class="tip-pill-btn" data-amount="10">$10 Generosity</button>
+        </div>
+
+        <div class="tip-legal-notice">
+          <strong>Mutual Aid Principle:</strong> Tips are strictly voluntary gifts of gratitude. 
+          Members cannot require, demand, or paywall services or mutual aid requests.
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="confirmTipBtn" class="btn btn-primary">
+          Send $3 Tip of Gratitude
+        </button>
+        <button id="cancelTipBtn" class="btn btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: CREATE NEW COMMONS MUTUAL AID LISTING -->
+  <dialog id="newAidModal" class="system-modal" aria-labelledby="newAidModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge aid-accent">
+        <span>🤝</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">THE COMMONS</span>
+        <h2 id="newAidModalTitle" class="modal-heading">Create Mutual Aid Listing</h2>
+
+        <form id="newAidForm" onsubmit="return false;">
+          <div class="form-group">
+            <label class="form-label">Listing Type:</label>
+            <div class="radio-pill-group">
+              <label class="radio-pill">
+                <input type="radio" name="aidType" value="offer" checked>
+                <span>🎁 Free Offer / Gift</span>
+              </label>
+              <label class="radio-pill">
+                <input type="radio" name="aidType" value="request">
+                <span>🆘 Community Need / Request</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="requestWarningNotice" class="warning-callout hidden">
+            ⚠️ <strong>Quota Alert:</strong> You already have 1 active community request. 
+            To prevent hoarding, you cannot post a second request until your previous need is resolved.
+          </div>
+
+          <div class="form-group">
+            <label for="aidItemTitle" class="form-label">Title / Item / Service:</label>
+            <input type="text" id="aidItemTitle" class="form-input" placeholder="e.g. Sourdough starter or Bike brake tuning" required>
+          </div>
+
+          <div class="form-group">
+            <label for="aidItemCategory" class="form-label">Category:</label>
+            <select id="aidItemCategory" class="form-select">
+              <option value="food">Food &amp; Nourishment</option>
+              <option value="skills">Skills &amp; Repairs</option>
+              <option value="tools">Tools &amp; Equipment Loan</option>
+              <option value="care">Ride &amp; Care Assistance</option>
+              <option value="goods">Household Goods &amp; Clothing</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="aidItemDesc" class="form-label">Description &amp; Location Details:</label>
+            <textarea id="aidItemDesc" rows="3" class="form-textarea" placeholder="Describe the item or need. Tips can be received but NEVER demanded." required></textarea>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="submitAidBtn" class="btn btn-primary">
+          Publish to The Commons
+        </button>
+        <button id="cancelAidModalBtn" class="btn btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: THE COMMONS HUMAN VERIFICATION (ID + SELFIE TO POST) -->
+  <dialog id="commonsVerificationModal" class="system-modal" aria-labelledby="verifyCommonsModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4);">
+        <span>🛡️</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">THE COMMONS</span>
+        <h2 id="verifyCommonsModalTitle" class="modal-heading">Verify Profile to Post in The Commons</h2>
+        <p class="modal-text">
+          To post mutual aid offers or requests, community trust and safety are paramount. Please upload a picture of yourself along with a picture of your ID.
+        </p>
+
+        <form id="commonsVerificationForm" onsubmit="return false;">
+          <div class="verification-upload-grid">
+            <!-- 1. Picture of Yourself (Selfie) -->
+            <div class="verification-upload-card">
+              <div class="verify-upload-header">
+                <span class="verify-step-num">1</span>
+                <div>
+                  <h4 class="verify-step-title">Picture of Yourself</h4>
+                  <p class="verify-step-sub">A clear photo of your face</p>
+                </div>
+              </div>
+              <div class="verify-dropzone" id="selfieDropzone">
+                <img id="verifySelfiePreview" class="verify-preview-img hidden" alt="Selfie Preview">
+                <div id="selfiePlaceholder" class="verify-drop-placeholder">
+                  <span class="verify-drop-icon">📸</span>
+                  <span>Click to choose photo</span>
+                </div>
+              </div>
+              <input type="file" id="verifySelfieInput" accept="image/*" class="sr-only" required>
+            </div>
+
+            <!-- 2. Picture of Your ID -->
+            <div class="verification-upload-card">
+              <div class="verify-upload-header">
+                <span class="verify-step-num">2</span>
+                <div>
+                  <h4 class="verify-step-title">Picture of Your ID</h4>
+                  <p class="verify-step-sub">Govt, Student, or Community ID</p>
+                </div>
+              </div>
+              <div class="verify-dropzone" id="idDropzone">
+                <img id="verifyIdPreview" class="verify-preview-img hidden" alt="ID Card Preview">
+                <div id="idPlaceholder" class="verify-drop-placeholder">
+                  <span class="verify-drop-icon">🪪</span>
+                  <span>Click to choose ID photo</span>
+                </div>
+              </div>
+              <input type="file" id="verifyIdInput" accept="image/*" class="sr-only" required>
+            </div>
+          </div>
+
+          <div class="verification-security-notice">
+            <span>🔒</span>
+            <span>ID pictures are encrypted and reviewed solely to verify organic human identity and defend against sybil bot swarms. Never meritocracy or employment checks.</span>
+          </div>
+
+          <div class="modal-actions-row" style="margin-top: 1.5rem;">
+            <button type="submit" id="submitCommonsVerificationBtn" class="btn btn-primary">
+              <span>🛡️ Submit ID &amp; Selfie Verification</span>
+            </button>
+            <button type="button" id="cancelCommonsVerificationBtn" class="btn btn-ghost">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: LOGIN / AUTHENTICATION -->
+  <dialog id="loginModal" class="system-modal" aria-labelledby="loginModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge">
+        <span>🔑</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">AUTHENTICATE</span>
+        <h2 id="loginModalTitle" class="modal-heading">Log In to Your Platform</h2>
+        <p class="modal-text">
+          Enter your registered email address or handle to access your personal platform, customize your space, and participate in The Commons.
+        </p>
+
+        <form id="loginForm" onsubmit="return false;">
+          <div class="form-group">
+            <label for="loginEmailOrHandle" class="form-label">Enter your email</label>
+            <input 
+              type="text" 
+              id="loginEmailOrHandle" 
+              class="form-input" 
+              placeholder="Enter your email" 
+              required 
+              autocomplete="username"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="loginPassword" class="form-label">Enter your Password</label>
+            <input 
+              type="password" 
+              id="loginPassword" 
+              class="form-input" 
+              placeholder="Enter your Password" 
+              required 
+              autocomplete="current-password"
+            >
+          </div>
+
+          <div id="loginErrorMsg" class="form-error-alert hidden"></div>
+
+          <div style="display: flex; justify-content: flex-end; margin-top: -4px; margin-bottom: 12px;">
+            <a href="/login.html#forgot" class="login-forgot-link" style="color: #38bdf8; font-size: 0.82rem; text-decoration: none;">Forgot your password?</a>
+          </div>
+
+          <div class="form-switch-prompt">
+            <span>Don't have a platform yet?</span>
+            <button type="button" class="btn-link" id="switchFromLoginToRegisterLink">Create Your Platform →</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="submitLoginBtn" class="btn btn-primary w-full">
+          🔑 Log In to Platform
+        </button>
+        <button id="cancelLoginBtn" class="btn btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: EDIT PROFILE & PLATFORM AESTHETICS -->
+  <dialog id="editProfileModal" class="system-modal" aria-labelledby="editProfileModalTitle">
+    <div class="modal-card modal-lg">
+      <div class="modal-icon-badge">
+        <span>✏️</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">CUSTOMIZE YOUR PLATFORM</span>
+        <h2 id="editProfileModalTitle" class="modal-heading">Edit Profile &amp; Aesthetics</h2>
+        <p class="modal-text">
+          Update your personal space, manage multiple profile pictures, select your core passions, or upload a new background image.
+        </p>
+
+        <form id="editProfileForm" onsubmit="return false;">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="editName" class="form-label">Display Name *</label>
+              <input type="text" id="editName" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label for="editLocation" class="form-label">Location (City, State / Region)</label>
+              <input type="text" id="editLocation" class="form-input" placeholder="e.g. San Francisco, CA">
+            </div>
+          </div>
+
+          <!-- Date of Birth & Show Zodiac Checkbox (Strictly NO Gender Asked) -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="editDob" class="form-label">Date of Birth</label>
+              <input type="date" id="editDob" class="form-input">
+            </div>
+            <div class="form-group" style="display:flex; flex-direction:column; justify-content:center;">
+              <label class="checkbox-container" style="margin-top:1.1rem; cursor:pointer;">
+                <input type="checkbox" id="editShowZodiac" checked>
+                <span class="checkbox-label-text">✨ Show zodiac on profile?</span>
+              </label>
+              <span class="form-label-hint" id="editZodiacPreview" style="color:var(--theme-primary); font-weight:700; margin-top:4px;"></span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="editBio" class="form-label">Short Bio (Artistic &amp; Passion Focus — Zero Meritocracy)</label>
+            <textarea id="editBio" rows="2" class="form-textarea" placeholder="Describe your passions, creative crafts, mutual aid gifts, or philosophical perspectives..."></textarea>
+          </div>
+
+          <!-- Personal Blurb / Motto (Max 15 words) -->
+          <div class="form-group">
+            <label for="editMotto" class="form-label">
+              Personal Motto / Statement / Blurb
+              <span class="form-label-hint">(Max 15 words — emojis supported)</span>
+            </label>
+            <input type="text" id="editMotto" class="form-input" placeholder='e.g. Solidarity Forever ✊🌹' maxlength="160">
+            <div class="motto-counter-bar">
+              <span class="motto-counter-text" id="editMottoCounter">0 / 15 words</span>
+              <span class="motto-emojis-badge">Emojis &amp; Symbols Supported ✊🌹✨</span>
+            </div>
+          </div>
+
+          <!-- Passions & Interests Box (Opens Passions Popup) -->
+          <div class="form-group">
+            <label class="form-label">
+              Passions &amp; Artistic Pursuits *
+              <span class="form-label-hint">(Top 3 will be featured beside your profile header)</span>
+            </label>
+            <div id="editPassionsTriggerBox" class="passions-trigger-box" tabindex="0" role="button" aria-haspopup="dialog" title="Click to choose passions">
+              <div id="editPassionsChipsContainer" class="passions-chips-list">
+                <!-- Dynamically rendered passion chips -->
+              </div>
+              <span class="btn-select-passions">Edit Passions ▾</span>
+            </div>
+          </div>
+
+          <!-- Scraped Sub-Topics from Posts (Can be featured or edited) -->
+          <div class="form-group">
+            <label class="form-label">
+              Scraped Sub-Topics &amp; Post Niches
+              <span class="form-label-hint">(Automatically gathered as you discuss specific genres like "Hardcore")</span>
+            </label>
+            <div id="editSubtopicsContainer" class="edit-subtopics-list">
+              <!-- Dynamically rendered subtopic chips with remove button -->
+            </div>
+            <div class="add-subtopic-input-row">
+              <input type="text" id="manualSubtopicInput" class="form-input form-input-sm" placeholder="Add custom sub-topic (e.g. Hardcore, Film Noir, Sourdough)...">
+              <button type="button" id="addManualSubtopicBtn" class="btn btn-secondary btn-sm">+ Add Sub-Topic</button>
+            </div>
+          </div>
+
+          <!-- Background Image Upload Section -->
+          <div class="form-group">
+            <label class="form-label">
+              Background Banner Image
+              <span class="form-label-hint">(Upload any picture to automatically adapt your platform styling)</span>
+            </label>
+            <div class="banner-edit-row">
+              <img id="editBannerPreviewImg" src="assets/maya-banner.jpg" alt="Banner Preview" class="banner-preview-thumb">
+              <div class="banner-edit-actions">
+                <label for="editBannerFileInput" class="btn btn-secondary btn-sm">
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  <span>Upload New Background</span>
+                  <input type="file" id="editBannerFileInput" accept="image/*" class="sr-only">
+                </label>
+                <span class="edit-field-note">Changes will automatically update your theme colors and styling for all visitors.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Multiple Profile Pictures Gallery & Swapper -->
+          <div class="form-group">
+            <label class="form-label">
+              Multiple Profile Pictures
+              <span class="form-label-hint">(Click any photo to set as your active avatar, or add new ones)</span>
+            </label>
+            <div class="edit-avatars-manager">
+              <div id="editAvatarsGallery" class="edit-avatars-grid">
+                <!-- Injected via JS -->
+              </div>
+              <label for="editAvatarUploadInput" class="btn btn-secondary btn-sm" title="Upload another picture to your profile reel">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Add Another Photo</span>
+                <input type="file" id="editAvatarUploadInput" accept="image/*" class="sr-only">
+              </label>
+            </div>
+          </div>
+
+          <!-- Ambient 3-Track Playlist Section with Tooltip -->
+          <div class="form-group ambient-playlist-edit-group">
+            <div class="form-label label-with-tooltip">
+              <span>🎵 Ambient 3-Track Playlist</span>
+              <span class="info-tooltip-wrap" tabindex="0">
+                <span class="tooltip-icon">ℹ️</span>
+                <span class="tooltip-bubble">
+                  <strong>3-Track Ambient Playlist:</strong> Add up to 3 YouTube audio tracks. When guests visit your platform, songs play seamlessly in order. When one song finishes, the next plays automatically!
+                </span>
+              </span>
+            </div>
+            
+            <div class="playlist-tracks-editor">
+              <div class="playlist-track-row">
+                <span class="playlist-track-num">1</span>
+                <input type="text" id="editTrack1Title" class="form-input form-input-sm" placeholder="Track 1 Title (e.g. Tycho — Awake)">
+                <input type="url" id="editTrack1Url" class="form-input form-input-sm" placeholder="https://www.youtube.com/watch?v=...">
+              </div>
+              <div class="playlist-track-row">
+                <span class="playlist-track-num">2</span>
+                <input type="text" id="editTrack2Title" class="form-input form-input-sm" placeholder="Track 2 Title (Optional)">
+                <input type="url" id="editTrack2Url" class="form-input form-input-sm" placeholder="YouTube Track 2 URL (Auto-plays next)">
+              </div>
+              <div class="playlist-track-row">
+                <span class="playlist-track-num">3</span>
+                <input type="text" id="editTrack3Title" class="form-input form-input-sm" placeholder="Track 3 Title (Optional)">
+                <input type="url" id="editTrack3Url" class="form-input form-input-sm" placeholder="YouTube Track 3 URL (Auto-plays next)">
+              </div>
+            </div>
+            <input type="hidden" id="editYoutubeUrl">
+            <input type="hidden" id="editMusicTitle">
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="editPrivacy" class="form-label">Platform Privacy</label>
+              <select id="editPrivacy" class="form-select">
+                <option value="public">🌐 Public Platform (Anyone can visit)</option>
+                <option value="private">🔒 Private Platform (Approved friends only)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="editAesthetic" class="form-label">Aesthetic Vibe &amp; Typography</label>
+              <select id="editAesthetic" class="form-select">
+                <option value="Modernist">Modernist Neo-Grotesque (Plus Jakarta)</option>
+                <option value="Warm Vintage">Warm Analog Vintage (Playfair Serif)</option>
+                <option value="Lush Botanical">Lush Botanical (Outfit)</option>
+                <option value="Cyber Neon">Cyber Neon (Inter / Mono)</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="saveEditProfileBtn" class="btn btn-primary">
+          💾 Save Profile &amp; Re-Theme
+        </button>
+        <button id="cancelEditProfileBtn" class="btn btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: PREGENERATED PASSIONS & INTERESTS POPUP -->
+  <dialog id="passionsPopupModal" class="system-modal" aria-labelledby="passionsModalTitle">
+    <div class="modal-card modal-lg">
+      <div class="modal-icon-badge">
+        <span>🎨</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">WHAT ENVELOPES YOUR PASSIONS</span>
+        <h2 id="passionsModalTitle" class="modal-heading">Select Passions &amp; Pursuits</h2>
+        <p class="modal-text">
+          Select what you are passionate about. We reject meritocracy, career ladders, and academic gatekeeping — The Platform is defined by crafts, ecological commitment, artistic expression, and mutual aid. <strong>The top three selected will be featured prominently beside your profile header.</strong>
+        </p>
+
+        <!-- Live Selection Counter -->
+        <div class="passions-counter-bar">
+          <span>Selected Passions: <strong id="passionsSelectedCountDisplay">0</strong></span>
+          <span class="counter-hint">★ First 3 will be featured beside your profile</span>
+        </div>
+
+        <div class="passions-categories-grid" id="passionsCategoriesGrid">
+          
+          <!-- Category 1: Physical Training, Strength & Movement -->
+          <div class="passions-category-card">
+            <h3 class="category-heading">🥋 Physical Training, Strength &amp; Movement</h3>
+            <p class="category-subheading">Bodycraft, kinetic flow, martial discipline &amp; outdoor endurance:</p>
+            <div class="passions-checkbox-list">
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Martial Arts">
+                <span>🥋 Martial Arts</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Working Out">
+                <span>🏃 Working Out</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Weightlifting">
+                <span>🏋️ Weightlifting</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Yoga & Meditation">
+                <span>🧘 Yoga &amp; Meditation</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Boxing & Combat">
+                <span>🥊 Boxing &amp; Combat</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Running">
+                <span>👟 Running</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Cycling">
+                <span>🚴 Cycling</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Climbing & Bouldering">
+                <span>🧗 Climbing &amp; Bouldering</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Swimming">
+                <span>🏊 Swimming</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Hiking & Outdoors">
+                <span>🥾 Hiking &amp; Outdoors</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Category 2: Mind, Studies, Literature & Inquiry -->
+          <div class="passions-category-card">
+            <h3 class="category-heading">📚 Mind, Studies, Literature &amp; Inquiry</h3>
+            <p class="category-subheading">Intellectual exploration, philosophy, science &amp; deep research:</p>
+            <div class="passions-checkbox-list">
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Reading">
+                <span>📚 Reading</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Studying">
+                <span>📖 Studying</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Philosophy">
+                <span>💭 Philosophy</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Science & Math">
+                <span>🔬 Science &amp; Math</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="History">
+                <span>🏺 History</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Languages & Linguistics">
+                <span>🗣️ Languages &amp; Linguistics</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Technology">
+                <span>💻 Technology</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Astronomy">
+                <span>🔭 Astronomy</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Architecture">
+                <span>🏛️ Architecture</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Category 3: Arts, Music & Creative Crafts -->
+          <div class="passions-category-card">
+            <h3 class="category-heading">🎨 Arts, Music &amp; Creative Crafts</h3>
+            <p class="category-subheading">Creative voice, analog aesthetics, soundscapes &amp; maker arts:</p>
+            <div class="passions-checkbox-list">
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Music">
+                <span>🎵 Music</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Movies">
+                <span>🎬 Movies</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Art & Design">
+                <span>🎨 Art &amp; Design</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Writing">
+                <span>✍️ Writing</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Poetry">
+                <span>📜 Poetry</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Photography">
+                <span>📷 Photography</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Woodworking">
+                <span>🪵 Woodworking</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Crafts">
+                <span>🧶 Crafts</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Gaming">
+                <span>🎮 Gaming</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Category 4: Earth, Food & Living Commons -->
+          <div class="passions-category-card">
+            <h3 class="category-heading">🌱 Earth, Food &amp; Living Commons</h3>
+            <p class="category-subheading">Sustenance, permaculture, heirloom craft &amp; nourishment:</p>
+            <div class="passions-checkbox-list">
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Baking">
+                <span>🍞 Baking</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Cooking">
+                <span>🍳 Cooking</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Gardening">
+                <span>🌿 Gardening</span>
+              </label>
+              <label class="passion-checkbox-label">
+                <input type="checkbox" name="passionCheck" value="Coffee & Tea">
+                <span>☕ Coffee &amp; Tea</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Dynamically Scraped Sub-Topics / Niches Section -->
+          <div class="passions-category-card scraped-niches-card" id="passionsScrapedCard">
+            <h3 class="category-heading">🔍 Discovered Sub-Topics &amp; Post Niches</h3>
+            <p class="category-subheading">Scraped automatically when you post discussions with a sub-topic (e.g. "Hardcore" for Music):</p>
+            <div class="passions-checkbox-list" id="passionsScrapedList">
+              <!-- Dynamically populated from author's subtopics in SQLite -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="confirmPassionsBtn" class="btn btn-primary">
+          ✅ Apply Selected Passions
+        </button>
+        <button id="cancelPassionsBtn" class="btn btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: FRIENDS & CONNECTIONS MANAGER -->
+  <dialog id="friendsModal" class="system-modal" aria-labelledby="friendsModalTitle">
+    <div class="modal-card modal-lg">
+      <div class="modal-icon-badge">
+        <span>👥</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">THE PLATFORM CONNECTIONS</span>
+        <h2 id="friendsModalTitle" class="modal-heading">Friends &amp; Relations</h2>
+        <p class="modal-text">
+          Manage your community friendships, respond to incoming connection requests, and stay in touch with fellow creators.
+        </p>
+
+        <!-- Friends Tab Switcher -->
+        <div class="friends-modal-tabs">
+          <button class="friends-tab-btn active" id="ftabFriendsBtn" data-ftab="friends">
+            <span>My Friends</span>
+            <span class="badge-mini" id="friendsTabCountBadge">0</span>
+          </button>
+          <button class="friends-tab-btn" id="ftabIncomingBtn" data-ftab="incoming">
+            <span>Incoming Requests</span>
+            <span class="badge-mini badge-alert hidden" id="incomingTabCountBadge">0</span>
+          </button>
+          <button class="friends-tab-btn" id="ftabOutgoingBtn" data-ftab="outgoing">
+            <span>Sent Requests</span>
+            <span class="badge-mini" id="outgoingTabCountBadge">0</span>
+          </button>
+        </div>
+
+        <!-- TAB 1: ACCEPTED FRIENDS -->
+        <div class="friends-tab-pane active" id="paneFriends">
+          <div class="friends-list-grid" id="myFriendsList">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- TAB 2: INCOMING REQUESTS (PROMPT TO ADD YOU OR NOT) -->
+        <div class="friends-tab-pane" id="paneIncoming">
+          <div class="friends-requests-list" id="incomingRequestsList">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- TAB 3: SENT REQUESTS -->
+        <div class="friends-tab-pane" id="paneOutgoing">
+          <div class="friends-requests-list" id="outgoingRequestsList">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="closeFriendsModalBtn" class="btn btn-secondary">
+          Close
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: AVATAR CROPPING, CENTERING & ZOOM -->
+  <dialog id="avatarCropModal" class="system-modal" aria-labelledby="avatarCropModalTitle">
+    <div class="modal-card modal-lg">
+      <div class="modal-icon-badge">
+        <span>🎯</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">AVATAR FIT &amp; FRAMING</span>
+        <h2 id="avatarCropModalTitle" class="modal-heading">Center, Zoom &amp; Crop Profile Picture</h2>
+        <p class="modal-text">
+          Drag to center or reposition your photo. Use the slider or mouse wheel to zoom in and out so your avatar fits the circular frame perfectly.
+        </p>
+
+        <div class="cropper-layout">
+          <!-- Main Interactive Cropper Stage -->
+          <div class="cropper-stage-wrapper">
+            <div class="cropper-canvas-box" id="cropperCanvasBox" title="Click and drag to pan and center the image">
+              <canvas id="cropCanvas" width="340" height="340" class="cropper-canvas"></canvas>
+              <!-- Circular Guide Mask Overlay -->
+              <div class="cropper-circle-guide"></div>
+            </div>
+
+            <!-- Zoom and Pan Controls -->
+            <div class="cropper-controls-bar">
+              <div class="zoom-slider-group">
+                <span class="zoom-label">🔍 Zoom:</span>
+                <input type="range" id="cropZoomSlider" min="0.3" max="3.5" step="0.05" value="1.0" class="cropper-slider">
+                <span class="zoom-value-text" id="cropZoomValueDisplay">100%</span>
+              </div>
+
+              <div class="cropper-quick-tools">
+                <button type="button" id="cropCenterBtn" class="btn btn-secondary btn-sm" title="Center image in the circle">
+                  🎯 Center
+                </button>
+                <button type="button" id="cropFitBtn" class="btn btn-secondary btn-sm" title="Fit image to the circle">
+                  📐 Fit
+                </button>
+                <button type="button" id="cropRotateBtn" class="btn btn-secondary btn-sm" title="Rotate 90 degrees clockwise">
+                  🔄 Rotate 90°
+                </button>
+                <button type="button" id="cropResetBtn" class="btn btn-ghost btn-sm" title="Reset zoom and position">
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Circular Preview Column -->
+          <div class="cropper-preview-col">
+            <span class="preview-title">Live Circular Fit:</span>
+            <div class="cropper-preview-circle-large">
+              <canvas id="cropPreviewCanvasLarge" width="96" height="96"></canvas>
+            </div>
+            <span class="preview-dim">Platform Header (96px)</span>
+
+            <div class="cropper-preview-circle-small" style="margin-top: 14px;">
+              <canvas id="cropPreviewCanvasSmall" width="44" height="44"></canvas>
+            </div>
+            <span class="preview-dim">Comment / Nav (44px)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="applyAvatarCropBtn" class="btn btn-primary">
+          ✅ Apply &amp; Set Profile Picture
+        </button>
+        <button type="button" id="cancelAvatarCropBtn" class="btn btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: PRIVATE MESSAGING SYSTEM FOR FRIENDS -->
+  <dialog id="directMessagesModal" class="system-modal" aria-labelledby="directMessagesModalTitle">
+    <div class="modal-card modal-xl dm-modal-card">
+      <div class="dm-container">
+        <!-- Friends Conversation List Sidebar -->
+        <div class="dm-sidebar">
+          <div class="dm-sidebar-header">
+            <div class="dm-header-title-row">
+              <span class="dm-icon">💬</span>
+              <h2 id="directMessagesModalTitle" class="dm-sidebar-title">Private Messages</h2>
+            </div>
+            <p class="dm-sidebar-subtitle">End-to-end authenticated between mutual friends</p>
+            <div class="dm-search-wrap">
+              <span class="dm-search-icon">🔍</span>
+              <input type="text" id="dmFriendsSearchInput" class="dm-search-input" placeholder="Search friends by name or @handle...">
+            </div>
+          </div>
+
+          <div class="dm-friends-list" id="dmFriendsList">
+            <!-- Dynamically populated friends list -->
+          </div>
+        </div>
+
+        <!-- Active Chat Window -->
+        <div class="dm-chat-window" id="dmChatWindow">
+          <!-- Active Chat Header -->
+          <div class="dm-chat-header" id="dmChatHeader">
+            <div class="dm-chat-user-info">
+              <img id="dmActiveFriendAvatar" src="assets/avatar-p-default.svg" alt="Friend Avatar" class="dm-active-avatar">
+              <div>
+                <div class="dm-active-name-row">
+                  <span id="dmActiveFriendName" class="dm-active-name">Select a friend</span>
+                  <span id="dmActiveFriendHandle" class="dm-active-handle"></span>
+                </div>
+                <div class="dm-active-status">
+                  <span class="status-dot-green"></span>
+                  <span id="dmActiveFriendMotto">Mutual Friend</span>
+                </div>
+              </div>
+            </div>
+            <div class="dm-header-actions" style="display: flex; align-items: center; gap: 0.75rem;">
+              <span id="dmE2eeBadge" class="dm-e2ee-badge" title="End-to-End Encrypted with ECDH + AES-GCM 256-bit">🔒 E2EE Active</span>
+              <button type="button" class="btn btn-ghost btn-sm" id="closeDmModalBtn">✕ Close</button>
+            </div>
+          </div>
+
+          <!-- Chat Messages Scroll Area -->
+          <div class="dm-messages-stream" id="dmMessagesStream">
+            <div class="dm-placeholder-state" id="dmPlaceholderState">
+              <div class="dm-placeholder-icon">💬</div>
+              <h3>Private Messages for Friends</h3>
+              <p>Select a friend from the left to start a secure conversation.</p>
+            </div>
+          </div>
+
+          <!-- DM Attachment Preview (Photo or GIF) -->
+          <div id="dmAttachmentPreview" class="dm-attachment-preview hidden">
+            <img id="dmPreviewImg" src="" alt="DM Attachment Preview" class="dm-preview-img">
+            <div class="dm-preview-info">
+              <span id="dmPreviewBadge" class="dm-preview-badge">📷 Attachment</span>
+              <span id="dmPreviewName" class="dm-preview-filename">photo.jpg</span>
+            </div>
+            <button type="button" id="dmRemoveAttachmentBtn" class="dm-preview-remove-btn" title="Remove attachment">✕</button>
+          </div>
+
+          <!-- Message Input Box -->
+          <form class="dm-input-bar hidden" id="dmInputBar" onsubmit="return false;">
+            <!-- Attach Photo Button -->
+            <label class="dm-tool-btn" title="Send a photo">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+              <input type="file" id="dmPhotoFileInput" accept="image/*" class="sr-only">
+            </label>
+
+            <!-- Attach GIF Button -->
+            <button type="button" id="dmGifBtn" class="dm-tool-btn gif-tool-btn" title="Choose an animated GIF">
+              <span class="dm-gif-label">GIF</span>
+            </button>
+
+            <!-- Voice Message Record Button -->
+            <button type="button" id="dmRecordVoiceBtn" class="dm-tool-btn voice-record-btn" title="Record a voice note">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            </button>
+
+            <input 
+              type="text" 
+              id="dmMessageInput" 
+              class="form-input dm-input-field" 
+              placeholder="Type a private message..." 
+              autocomplete="off"
+              maxlength="2000"
+            >
+            <button type="submit" id="dmSendMessageBtn" class="btn btn-primary dm-send-btn">
+              <span>Send</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+          </form>
+
+          <!-- Live Voice Recording Panel (Active while user is speaking) -->
+          <div id="dmRecordingBar" class="dm-recording-bar hidden">
+            <div class="dm-rec-status">
+              <span class="rec-pulsing-dot"></span>
+              <span class="rec-label">Recording Voice Note...</span>
+              <span id="dmRecordingTimer" class="rec-timer">0:00</span>
+            </div>
+            <div class="rec-waves">
+              <span class="rec-wave-bar"></span>
+              <span class="rec-wave-bar"></span>
+              <span class="rec-wave-bar"></span>
+              <span class="rec-wave-bar"></span>
+              <span class="rec-wave-bar"></span>
+              <span class="rec-wave-bar"></span>
+              <span class="rec-wave-bar"></span>
+            </div>
+            <div class="rec-actions">
+              <button type="button" id="dmCancelVoiceBtn" class="btn btn-ghost btn-sm rec-cancel-btn" title="Cancel voice recording">✕ Cancel</button>
+              <button type="button" id="dmSendVoiceBtn" class="btn btn-primary btn-sm rec-send-btn" title="Finish and send voice note">✓ Send Voice Note</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+
+  <!-- MODAL: WHAT'S NEW ON THE PLATFORM — FEATURE GUIDE -->
+  <dialog id="featureGuideModal" class="system-modal" aria-labelledby="featureGuideTitle">
+    <div class="modal-card modal-lg feature-guide-modal-card">
+      <div class="modal-icon-badge" style="background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.4);">
+        <span>✨</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">THE PLATFORM UPDATE</span>
+        <h2 id="featureGuideTitle" class="modal-heading">What's New on The Platform</h2>
+        <p class="modal-text">
+          Welcome! We've introduced powerful community and discovery features. <strong>Your profile, passions, and customizations remain 100% permanent and untouched.</strong> Here is how to use the latest capabilities:
+        </p>
+
+        <div class="feature-guide-grid">
+          <div class="feature-guide-card">
+            <div class="feature-guide-icon">#️⃣</div>
+            <div class="feature-guide-text">
+              <h4># Post Tagging &amp; Mentions</h4>
+              <p>Type <code>#</code> in the composer to view and tag recent platform posts you've participated in. Tagging boosts the post's visibility and trending rank!</p>
+            </div>
+          </div>
+
+          <div class="feature-guide-card">
+            <div class="feature-guide-icon">💬</div>
+            <div class="feature-guide-text">
+              <h4>@ Friend Mentions &amp; Notifications</h4>
+              <p>Type <code>@</code> in the composer to mention mutual friends. Tagged friends receive instant alerts in the top bar 🔔 notification center.</p>
+            </div>
+          </div>
+
+          <div class="feature-guide-card">
+            <div class="feature-guide-icon">✏️</div>
+            <div class="feature-guide-text">
+              <h4>Edit &amp; Delete Control</h4>
+              <p>Full control over your voice: edit your own posts and topics anytime, delete posts from your platform, or remove your own comments on others' posts.</p>
+            </div>
+          </div>
+
+          <div class="feature-guide-card">
+            <div class="feature-guide-icon">🚩</div>
+            <div class="feature-guide-text">
+              <h4>Community Off-Topic Flagging</h4>
+              <p>Spot an off-topic post? Flag it with 🚩. At 3 flags, it escalates to Admin Moderation. The author or admin can re-classify the topic to automatically clear flags.</p>
+            </div>
+          </div>
+
+          <div class="feature-guide-card">
+            <div class="feature-guide-icon">🎵</div>
+            <div class="feature-guide-text">
+              <h4>3-Track Ambient Playlist</h4>
+              <p>Curate up to 3 YouTube audio tracks in your Profile Editor. The sidebar player seamlessly auto-advances to the next track when the current song ends!</p>
+            </div>
+          </div>
+
+          <div class="feature-guide-card">
+            <div class="feature-guide-icon">💭</div>
+            <div class="feature-guide-text">
+              <h4>Open Thoughts &amp; Friends-Only Privacy</h4>
+              <p>Post uncategorized "Open Thoughts" without a topic (kept off Trending), or switch visibility to 🔒 Friends Only for private circle sharing.</p>
+            </div>
+          </div>
+
+          <div class="feature-guide-card">
+            <div class="feature-guide-icon">🔥</div>
+            <div class="feature-guide-text">
+              <h4>Decaying Hot Trending Feed</h4>
+              <p>The Topics &amp; Passions feed ranks public, topicked posts using Reddit-style decay: likes, comments, mentions, and views boost posts while decaying over time so fresh voices emerge.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="closeFeatureGuideBtn" class="btn btn-primary">
+          🚀 Got It, Explore!
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: EDIT POST -->
+  <dialog id="editPostModal" class="system-modal" aria-labelledby="editPostModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge">
+        <span>✏️</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">POST MANAGEMENT</span>
+        <h2 id="editPostModalTitle" class="modal-heading">Edit Post</h2>
+        <input type="hidden" id="editPostId">
+
+        <form id="editPostForm" onsubmit="return false;">
+          <div class="form-group">
+            <label for="editPostTopicSelect" class="form-label">Topic / Discipline</label>
+            <select id="editPostTopicSelect" class="form-select">
+              <option value="">💭 Open Thought (No Topic - stays off Trending)</option>
+              <optgroup label="Physical Training &amp; Movement">
+                <option value="Martial Arts">🥋 Martial Arts</option>
+                <option value="Working Out">🏃 Working Out</option>
+                <option value="Weightlifting">🏋️ Weightlifting</option>
+                <option value="Yoga & Meditation">🧘 Yoga &amp; Meditation</option>
+                <option value="Boxing & Combat">🥊 Boxing &amp; Combat</option>
+                <option value="Running">👟 Running</option>
+                <option value="Cycling">🚴 Cycling</option>
+                <option value="Climbing & Bouldering">🧗 Climbing &amp; Bouldering</option>
+                <option value="Swimming">🏊 Swimming</option>
+                <option value="Hiking & Outdoors">🥾 Hiking &amp; Outdoors</option>
+              </optgroup>
+              <optgroup label="Mind, Studies &amp; Literature">
+                <option value="Reading">📚 Reading</option>
+                <option value="Studying">📖 Studying</option>
+                <option value="Philosophy">💭 Philosophy</option>
+                <option value="Science & Math">🔬 Science &amp; Math</option>
+                <option value="History">🏺 History</option>
+                <option value="Languages & Linguistics">🗣️ Languages &amp; Linguistics</option>
+                <option value="Technology">💻 Technology</option>
+                <option value="Astronomy">🔭 Astronomy</option>
+                <option value="Architecture">🏛️ Architecture</option>
+              </optgroup>
+              <optgroup label="Arts, Music &amp; Crafts">
+                <option value="Music">🎵 Music</option>
+                <option value="Movies">🎬 Movies</option>
+                <option value="Art & Design">🎨 Art &amp; Design</option>
+                <option value="Writing">✍️ Writing</option>
+                <option value="Poetry">📜 Poetry</option>
+                <option value="Photography">📷 Photography</option>
+                <option value="Woodworking">🪵 Woodworking</option>
+                <option value="Crafts">🧶 Crafts</option>
+                <option value="Gaming">🎮 Gaming</option>
+              </optgroup>
+              <optgroup label="Earth, Food &amp; Living">
+                <option value="Baking">🍞 Baking</option>
+                <option value="Cooking">🍳 Cooking</option>
+                <option value="Gardening">🌿 Gardening</option>
+                <option value="Coffee & Tea">☕ Coffee &amp; Tea</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="editPostSubtopicInput" class="form-label">Sub-Topic / Genre</label>
+            <input type="text" id="editPostSubtopicInput" class="form-input" placeholder="e.g. Ambient, Sourdough, Noir...">
+          </div>
+
+          <div class="form-group">
+            <label for="editPostVisibilitySelect" class="form-label">Visibility</label>
+            <select id="editPostVisibilitySelect" class="form-select">
+              <option value="public">🌐 Public Platform</option>
+              <option value="friends">🔒 Friends Only</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="editPostContentTextarea" class="form-label">Post Content</label>
+            <textarea id="editPostContentTextarea" class="form-textarea" rows="4" required></textarea>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="saveEditPostBtn" class="btn btn-primary">Save Changes</button>
+        <button type="button" id="cancelEditPostBtn" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: CHANGE POST TOPIC (CLEARS FLAGS) -->
+  <dialog id="changeTopicModal" class="system-modal" aria-labelledby="changeTopicModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge" style="background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.4);">
+        <span>🏷️</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">COMMUNITY RE-CLASSIFICATION</span>
+        <h2 id="changeTopicModalTitle" class="modal-heading">Change Post Topic</h2>
+        <p class="modal-text">
+          Re-classifying this post to the correct topic or converting it to an Open Thought will <strong>clear all community off-topic flags</strong> and restore its standing.
+        </p>
+        <input type="hidden" id="changeTopicPostId">
+
+        <form id="changeTopicForm" onsubmit="return false;">
+          <div class="form-group">
+            <label for="changeTopicSelect" class="form-label">New Topic / Category *</label>
+            <select id="changeTopicSelect" class="form-select" required>
+              <option value="">💭 Open Thought (No Topic - clears from Trending)</option>
+              <optgroup label="Physical Training &amp; Movement">
+                <option value="Martial Arts">🥋 Martial Arts</option>
+                <option value="Working Out">🏃 Working Out</option>
+                <option value="Weightlifting">🏋️ Weightlifting</option>
+                <option value="Yoga & Meditation">🧘 Yoga &amp; Meditation</option>
+                <option value="Boxing & Combat">🥊 Boxing &amp; Combat</option>
+                <option value="Running">👟 Running</option>
+                <option value="Cycling">🚴 Cycling</option>
+                <option value="Climbing & Bouldering">🧗 Climbing &amp; Bouldering</option>
+                <option value="Swimming">🏊 Swimming</option>
+                <option value="Hiking & Outdoors">🥾 Hiking &amp; Outdoors</option>
+              </optgroup>
+              <optgroup label="Mind, Studies &amp; Literature">
+                <option value="Reading">📚 Reading</option>
+                <option value="Studying">📖 Studying</option>
+                <option value="Philosophy">💭 Philosophy</option>
+                <option value="Science & Math">🔬 Science &amp; Math</option>
+                <option value="History">🏺 History</option>
+                <option value="Languages & Linguistics">🗣️ Languages &amp; Linguistics</option>
+                <option value="Technology">💻 Technology</option>
+                <option value="Astronomy">🔭 Astronomy</option>
+                <option value="Architecture">🏛️ Architecture</option>
+              </optgroup>
+              <optgroup label="Arts, Music &amp; Crafts">
+                <option value="Music">🎵 Music</option>
+                <option value="Movies">🎬 Movies</option>
+                <option value="Art & Design">🎨 Art &amp; Design</option>
+                <option value="Writing">✍️ Writing</option>
+                <option value="Poetry">📜 Poetry</option>
+                <option value="Photography">📷 Photography</option>
+                <option value="Woodworking">🪵 Woodworking</option>
+                <option value="Crafts">🧶 Crafts</option>
+                <option value="Gaming">🎮 Gaming</option>
+              </optgroup>
+              <optgroup label="Earth, Food &amp; Living">
+                <option value="Baking">🍞 Baking</option>
+                <option value="Cooking">🍳 Cooking</option>
+                <option value="Gardening">🌿 Gardening</option>
+                <option value="Coffee & Tea">☕ Coffee &amp; Tea</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="changeSubtopicInput" class="form-label">New Sub-Topic / Specific Focus</label>
+            <input type="text" id="changeSubtopicInput" class="form-input" placeholder="e.g. Folk Acoustic, Vintage Cameras...">
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="saveChangeTopicBtn" class="btn btn-primary">Update Topic &amp; Clear Flags</button>
+        <button type="button" id="cancelChangeTopicBtn" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: FACEBOOK-STYLE GIF PICKER -->
+  <dialog id="gifPickerModal" class="system-modal" aria-labelledby="gifPickerTitle">
+    <div class="modal-card modal-lg gif-picker-card">
+      <div class="gif-picker-header">
+        <div class="gif-header-title-row">
+          <span class="gif-title-icon">👾</span>
+          <h3 id="gifPickerTitle" class="gif-picker-title">Choose a GIF</h3>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="closeGifPickerBtn">✕</button>
+      </div>
+
+      <!-- Search input -->
+      <div class="gif-search-bar">
+        <span class="gif-search-icon">🔍</span>
+        <input type="text" id="gifSearchInput" class="gif-search-input" placeholder="Search animated GIFs (reactions, emotions, memes)..." autocomplete="off">
+        <button type="button" id="gifSearchClearBtn" class="gif-search-clear hidden">✕</button>
+      </div>
+
+      <!-- Category / Reaction Pills -->
+      <div class="gif-category-pills" id="gifCategoryPills" role="tablist" aria-label="Reaction Types">
+        <button type="button" class="gif-pill active" data-cat="laugh">😂 Laugh</button>
+        <button type="button" class="gif-pill" data-cat="love">❤️ Love</button>
+        <button type="button" class="gif-pill" data-cat="thumbsup">👍 Thumbs Up</button>
+        <button type="button" class="gif-pill" data-cat="celebrate">🎉 Celebrate</button>
+        <button type="button" class="gif-pill" data-cat="dancing">🕺 Dancing</button>
+        <button type="button" class="gif-pill" data-cat="mindblown">🤯 Mind Blown</button>
+        <button type="button" class="gif-pill" data-cat="applause">👏 Applause</button>
+        <button type="button" class="gif-pill" data-cat="coffee">☕ Coffee</button>
+        <button type="button" class="gif-pill" data-cat="shocked">😲 Shocked</button>
+        <button type="button" class="gif-pill" data-cat="cute">😻 Cute</button>
+        <button type="button" class="gif-pill" data-cat="cool">😎 Cool</button>
+        <button type="button" class="gif-pill" data-cat="cry">😭 Cry</button>
+        <button type="button" class="gif-pill" data-cat="thinking">🤔 Thinking</button>
+        <button type="button" class="gif-pill" data-cat="trending">🔥 Trending</button>
+      </div>
+
+      <!-- Reaction Horizontal Scroll Reel Section -->
+      <div class="gif-horizontal-section" id="gifHorizontalSection">
+        <div class="gif-horizontal-header">
+          <div class="gif-category-header-info">
+            <span id="gifActiveCategoryBadge" class="gif-active-category-badge">😂 Laugh Reactions</span>
+            <span id="gifHorizontalCount" class="gif-horizontal-count">25 GIFs</span>
+            <span class="gif-scroll-hint">← Scroll horizontally through reactions →</span>
+          </div>
+          <div class="gif-scroll-nav-controls">
+            <button type="button" id="gifScrollLeftBtn" class="gif-scroll-nav-btn" title="Scroll Left (◀)" aria-label="Scroll GIFs Left">◀</button>
+            <button type="button" id="gifScrollRightBtn" class="gif-scroll-nav-btn" title="Scroll Right (▶)" aria-label="Scroll GIFs Right">▶</button>
+          </div>
+        </div>
+
+        <div class="gif-horizontal-scroll-container" id="gifHorizontalScrollContainer" tabindex="0" role="region" aria-label="Horizontal Reaction GIFs Reel">
+          <div class="gif-horizontal-track" id="gifHorizontalTrack">
+            <!-- Populated via JavaScript with interactive animated GIFs -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid Exploration Header & Grid -->
+      <div class="gif-grid-header">
+        <span class="gif-grid-label">EXPLORE ALL MATCHING REACTION GIFS:</span>
+      </div>
+      <div class="gif-results-grid" id="gifResultsGrid">
+        <!-- Populated via JavaScript -->
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: FOUND A NEW COLLECTIVE -->
+  <dialog id="createCollectiveModal" class="system-modal" aria-labelledby="createCollectiveModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4);">
+        <span>🏛️</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">DEMOCRATIC STEWARDSHIP</span>
+        <h2 id="createCollectiveModalTitle" class="modal-heading">Found a New Collective</h2>
+        <p class="modal-text">
+          Create an autonomous guild or mutual aid cooperative. All members hold equal voice, with shared karma pooling and member stewardship.
+        </p>
+
+        <form id="createCollectiveForm" onsubmit="return false;">
+          <div class="form-group">
+            <label for="collectiveNameInput" class="form-label">Collective Name *</label>
+            <input type="text" id="collectiveNameInput" class="form-input" placeholder="e.g. Bay Area Seed Library" required maxlength="100">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+              <label for="collectiveCategorySelect" class="form-label">Primary Discipline *</label>
+              <select id="collectiveCategorySelect" class="form-select" required>
+                <option value="Mutual Aid">🤝 Mutual Aid</option>
+                <option value="Technology">⚡ Technology</option>
+                <option value="Ecology &amp; Food">🌿 Ecology &amp; Food</option>
+                <option value="Art &amp; Music">🎸 Art &amp; Music</option>
+                <option value="Philosophy &amp; Ethics">💭 Philosophy &amp; Ethics</option>
+                <option value="Local Resilience">🏘️ Local Resilience</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label for="collectiveIconInput" class="form-label">Icon / Emoji</label>
+              <input type="text" id="collectiveIconInput" class="form-input" placeholder="🌱" maxlength="4" value="🌱">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="collectiveManifestoInput" class="form-label">Manifesto &amp; Operating Principles *</label>
+            <textarea id="collectiveManifestoInput" class="form-textarea" rows="4" placeholder="Our purpose, how we share resources, and our solidarity commitments..." required maxlength="1000"></textarea>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="createCollectiveSubmitBtn" class="btn btn-primary">Found Collective</button>
+        <button type="button" id="cancelCreateCollectiveBtn" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: MUTUAL AID PROXIMITY RADAR -->
+  <dialog id="proximityRadarModal" class="system-modal" aria-labelledby="radarModalTitle">
+    <div class="modal-card modal-lg radar-modal-card">
+      <div class="radar-modal-header">
+        <div class="radar-header-title-row">
+          <span class="radar-title-icon">📍</span>
+          <div>
+            <h3 id="radarModalTitle" class="radar-modal-title">Mutual Aid Proximity Radar</h3>
+            <span class="radar-modal-sub">Privacy-preserving local clusters &bull; Zero GPS tracking &bull; Geohash fuzzy rings</span>
+          </div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="closeProximityRadarBtn">✕ Close</button>
+      </div>
+
+      <!-- Radar Filter Range Buttons -->
+      <div class="radar-range-bar">
+        <span class="radar-range-label">Cluster Distance:</span>
+        <div class="radar-range-pills" id="radarRangePills">
+          <button type="button" class="radar-pill active" data-radius="5">5 km (Walking / Bike)</button>
+          <button type="button" class="radar-pill" data-radius="15">15 km (Neighborhood)</button>
+          <button type="button" class="radar-pill" data-radius="50">50 km (Greater Metro)</button>
+        </div>
+      </div>
+
+      <!-- Radar Screen & Details Layout -->
+      <div class="radar-interactive-layout">
+        <div class="radar-screen-wrap">
+          <canvas id="proximityRadarCanvas" width="400" height="400" class="radar-canvas"></canvas>
+          <div class="radar-sweep-indicator">
+            <span class="radar-ping-dot"></span>
+            <span class="radar-live-text">SCANNING LOCAL MESH</span>
+          </div>
+        </div>
+
+        <div class="radar-sidebar">
+          <h4 class="radar-sidebar-heading">Active Proximity Blips (<span id="radarBlipCount">0</span>)</h4>
+          <p class="radar-sidebar-hint">Tap any blip or list item to view contact details.</p>
+          <div class="radar-blips-list" id="radarBlipsList">
+            <!-- Populated via JS -->
+          </div>
+          
+          <div id="radarSelectedDetailCard" class="radar-selected-card hidden">
+            <div class="radar-selected-header">
+              <span id="radarSelectedTypeBadge" class="badge-mini">🎁 OFFER</span>
+              <strong id="radarSelectedTitle">Title</strong>
+            </div>
+            <p id="radarSelectedDesc" class="radar-selected-desc"></p>
+            <div class="radar-selected-meta">
+              <span id="radarSelectedDist">📍 2.4 km away</span>
+              <span id="radarSelectedAuthor">by Maya Lin</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: MINDFUL DISCONNECT & ZEN SANCTUARY -->
+  <dialog id="mindfulDisconnectModal" class="system-modal" aria-labelledby="mindfulModalTitle">
+    <div class="modal-card mindful-modal-card">
+      <div class="modal-icon-badge" style="background: rgba(56, 189, 248, 0.2); border-color: rgba(56, 189, 248, 0.4);">
+        <span>🍃</span>
+      </div>
+
+      <div class="modal-body-content">
+        <span class="modal-pretitle">MINDFUL DISCONNECT</span>
+        <h2 id="mindfulModalTitle" class="modal-heading">All Caught Up &bull; Breathe &amp; Restore</h2>
+        <p class="modal-text">
+          The Platform is built without infinite algorithmic addiction loops. You have engaged with everything fresh. Take a mindful moment.
+        </p>
+
+        <!-- Box Breathing Interactive Circle -->
+        <div class="zen-breathing-stage">
+          <div class="zen-circle-container">
+            <div id="zenBreathingCircle" class="zen-breathing-circle">
+              <span id="zenBreathingLabel" class="zen-phase-text">Breathe In</span>
+            </div>
+            <div class="zen-ripple-ring ring-1"></div>
+            <div class="zen-ripple-ring ring-2"></div>
+          </div>
+          <div class="zen-cadence-legend">
+            <span>Box Breathing: 4s Inhale &bull; 4s Hold &bull; 4s Exhale &bull; 4s Rest</span>
+          </div>
+        </div>
+
+        <div class="zen-stats-box">
+          <div class="zen-stat-item">
+            <span class="zen-stat-num" id="zenSessionTime">12m</span>
+            <span class="zen-stat-label">Session Duration</span>
+          </div>
+          <div class="zen-stat-item">
+            <span class="zen-stat-num">0</span>
+            <span class="zen-stat-label">Algorithmic Traps</span>
+          </div>
+          <div class="zen-stat-item">
+            <span class="zen-stat-num">100%</span>
+            <span class="zen-stat-label">Human Sovereign</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button type="button" id="zenStepAwayBtn" class="btn btn-primary">🌿 Step Away &amp; Walk Outside</button>
+        <button type="button" id="closeMindfulBtn" class="btn btn-ghost">Return to Dispatches</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Video Theater Pop-up Modal (Blurred Background Behind It - For Post Videos Only) -->
+  <dialog id="videoTheaterModal" class="video-theater-modal" aria-labelledby="theaterVideoTitle">
+    <div class="video-theater-container">
+      <div class="video-theater-header">
+        <div class="theater-title-wrap">
+          <span class="theater-badge">🎬 COMMUNITY VIDEO THEATER</span>
+          <h3 id="theaterVideoTitle" class="theater-title">Playing Video</h3>
+        </div>
+        <button type="button" id="closeTheaterModalBtn" class="theater-close-btn" title="Close Theater Mode" aria-label="Close Theater Video">✕</button>
+      </div>
+      <div class="video-theater-player-box">
+        <div id="theaterPlayerHost" class="theater-player-host">
+          <!-- Populated dynamically with YouTube player when opened -->
+        </div>
+      </div>
+      <div class="video-theater-footer">
+        <span class="theater-hint">Tap backdrop or press ESC to dismiss theater mode</span>
+        <a id="theaterExternalLink" href="#" target="_blank" rel="noopener noreferrer" class="theater-external-btn">
+          <span>Watch on YouTube ↗</span>
+        </a>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Floating Ambient Music Player Dock (Mobile & Persistent Playback) -->
+  <aside id="floatingAudioDock" class="floating-audio-dock hidden" aria-label="Persistent Theme Audio Player">
+    <div class="floating-dock-inner">
+      <div class="floating-dock-left">
+        <div class="dock-vinyl-disc" id="dockVinylDisc">
+          <div class="dock-vinyl-center"></div>
+        </div>
+        <div class="dock-track-info">
+          <span class="dock-now-playing-label">THEME AUDIO 🎧</span>
+          <h4 id="dockTrackTitle" class="dock-track-title">Ambient Theme</h4>
+          <span id="dockTrackSubtitle" class="dock-track-subtitle">Auto-plays next track</span>
+        </div>
+      </div>
+      <div class="floating-dock-controls">
+        <button type="button" id="dockPrevBtn" class="dock-btn-icon" title="Previous Track" aria-label="Previous Track">⏮</button>
+        <button type="button" id="dockPlayPauseBtn" class="dock-btn-play" title="Play / Pause" aria-label="Play or Pause">
+          <span id="dockPlayPauseIcon">⏸</span>
+        </button>
+        <button type="button" id="dockNextBtn" class="dock-btn-icon" title="Next Track" aria-label="Next Track">⏭</button>
+        <button type="button" id="dockVideoToggleBtn" class="dock-btn-icon" title="Toggle Player View" aria-label="Show or Hide Video Player">📺</button>
+        <button type="button" id="dockCloseBtn" class="dock-btn-icon dock-btn-close" title="Dismiss Player" aria-label="Close Audio Player">✕</button>
+      </div>
+    </div>
+    <!-- Expandable Interactive Video/Iframe Container for Mobile Visibility -->
+    <div id="dockVideoContainer" class="dock-video-container">
+      <div id="youtubePlayerHost" class="yt-player-container"></div>
+    </div>
+    <!-- Quick Audio Mode Switcher -->
+    <div class="dock-options-bar">
+      <span id="dockMobileHint" class="dock-hint-text">📱 Mobile Tip: Tap video to start sound</span>
+      <button type="button" id="dockSynthToggleBtn" class="btn-dock-mode">🎵 Play Synth Audio</button>
+    </div>
+  </aside>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- Offscreen Canvas for Deterministic Color Palette & Contrast Extraction -->
+  <canvas id="colorExtractionCanvas" width="100" height="100" class="sr-only" aria-hidden="true"></canvas>
+
+  <script src="app.js"></script>
+</body>
+</html>

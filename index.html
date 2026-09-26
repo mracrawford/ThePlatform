@@ -12,6 +12,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="styles.css">
+  <!-- Leaflet CSS for Privacy-Preserving True Interactive Map (Zero GPS) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 </head>
 <body>
 
@@ -711,6 +713,42 @@
           </div>
         </div>
 
+        <!-- View Mode Switcher: Grid / True Map / Proximity Radar -->
+        <div class="commons-view-mode-bar">
+          <div class="commons-view-tabs" id="commonsViewTabs">
+            <button type="button" class="view-tab-btn active" data-view="grid" id="commonsViewGridBtn">
+              <span>📋 Marketplace Grid</span>
+            </button>
+            <button type="button" class="view-tab-btn" data-view="map" id="commonsViewMapBtn">
+              <span>🗺️ True Interactive Map</span>
+            </button>
+            <button type="button" class="view-tab-btn" data-view="radar" id="commonsViewRadarBtn">
+              <span>📡 Proximity Radar</span>
+            </button>
+          </div>
+          <div class="commons-user-location-badge" id="commonsUserLocationBadge" title="True distance calculated from your input address (Zero GPS)">
+            <span class="location-pulse-dot"></span>
+            <span class="location-label">Home Base:</span>
+            <strong id="commonsViewerLocationText">Los Banos, CA</strong>
+          </div>
+        </div>
+
+        <!-- Interactive Map Container (Shown when Map tab selected) -->
+        <div id="commonsMapContainer" class="commons-map-container hidden">
+          <div class="commons-map-header">
+            <div class="map-header-info">
+              <h3 class="map-header-title">🗺️ Mutual Aid Geographic Mesh</h3>
+              <p class="map-header-sub">True positions resolved from member addresses &bull; Zero GPS tracking &bull; Exact physical distances</p>
+            </div>
+            <div class="map-legend">
+              <span class="map-legend-item"><span class="legend-dot home"></span> You (Home Base)</span>
+              <span class="map-legend-item"><span class="legend-dot offer"></span> 🎁 Offers</span>
+              <span class="map-legend-item"><span class="legend-dot request"></span> 🆘 Needs</span>
+            </div>
+          </div>
+          <div id="commonsLeafletMap" class="commons-leaflet-map"></div>
+        </div>
+
         <!-- Filter Controls -->
         <div class="commons-filter-bar">
           <div class="filter-pills">
@@ -1084,8 +1122,10 @@
 
           <div class="form-row-2">
             <div class="form-group">
-              <label for="regLocation" class="form-label">Location (City, State / Region)</label>
-              <input type="text" id="regLocation" class="form-input" placeholder="e.g. San Francisco, CA">
+              <label for="regLocation" class="form-label">Location (Street Address or City, State)</label>
+              <input type="text" id="regLocation" class="form-input" placeholder="e.g. Los Banos, CA or 645 Pacheco Blvd, Los Banos, CA">
+              <span class="form-label-hint">Zero GPS tracking — used solely to calculate true distance in The Commons</span>
+              <div id="regLocationFeedback" class="location-feedback-pill hidden"></div>
             </div>
             <div class="form-group">
               <label for="regPhone" class="form-label">Mobile Phone Number (Optional)</label>
@@ -1404,8 +1444,15 @@
           </div>
 
           <div class="form-group">
-            <label for="aidItemDesc" class="form-label">Description &amp; Location Details:</label>
+            <label for="aidItemDesc" class="form-label">Description &amp; Details:</label>
             <textarea id="aidItemDesc" rows="3" class="form-textarea" placeholder="Describe the item or need. Tips can be received but NEVER demanded." required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="aidItemLocation" class="form-label">Item / Pickup Location (Street Address or City, State):</label>
+            <input type="text" id="aidItemLocation" class="form-input" placeholder="e.g. 645 Pacheco Blvd, Los Banos, CA or leave blank to use your profile location">
+            <span class="form-label-hint">Zero GPS tracking — coordinates resolved strictly from your input for true distance calculation.</span>
+            <div id="aidLocationFeedback" class="location-feedback-pill hidden"></div>
           </div>
         </form>
       </div>
@@ -1578,8 +1625,10 @@
               <input type="text" id="editName" class="form-input" required>
             </div>
             <div class="form-group">
-              <label for="editLocation" class="form-label">Location (City, State / Region)</label>
-              <input type="text" id="editLocation" class="form-input" placeholder="e.g. San Francisco, CA">
+              <label for="editLocation" class="form-label">Location (Street Address or City, State)</label>
+              <input type="text" id="editLocation" class="form-input" placeholder="e.g. Los Banos, CA or 645 Pacheco Blvd, Los Banos, CA">
+              <span class="form-label-hint">Zero GPS tracking — used solely to calculate true distance in The Commons</span>
+              <div id="editLocationFeedback" class="location-feedback-pill hidden"></div>
             </div>
           </div>
 
@@ -2583,19 +2632,23 @@
           <span class="radar-title-icon">📍</span>
           <div>
             <h3 id="radarModalTitle" class="radar-modal-title">Mutual Aid Proximity Radar</h3>
-            <span class="radar-modal-sub">Privacy-preserving local clusters &bull; Zero GPS tracking &bull; Geohash fuzzy rings</span>
+            <span class="radar-modal-sub">Privacy-preserving local clusters &bull; Zero GPS tracking &bull; Center: <strong id="radarViewerLocation" style="color:var(--theme-primary);">Los Banos, CA</strong></span>
           </div>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="closeProximityRadarBtn">✕ Close</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn btn-outline btn-xs" id="radarSwitchToMapBtn" title="Switch to Full Leaflet Map View">🗺️ Open Full Map</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="closeProximityRadarBtn">✕ Close</button>
+        </div>
       </div>
 
       <!-- Radar Filter Range Buttons -->
       <div class="radar-range-bar">
-        <span class="radar-range-label">Cluster Distance:</span>
+        <span class="radar-range-label">Radar Scope Radius:</span>
         <div class="radar-range-pills" id="radarRangePills">
           <button type="button" class="radar-pill active" data-radius="5">5 km (Walking / Bike)</button>
-          <button type="button" class="radar-pill" data-radius="15">15 km (Neighborhood)</button>
-          <button type="button" class="radar-pill" data-radius="50">50 km (Greater Metro)</button>
+          <button type="button" class="radar-pill" data-radius="25">25 km (Local Town)</button>
+          <button type="button" class="radar-pill" data-radius="150">150 km (Regional SF/Bay Area)</button>
+          <button type="button" class="radar-pill" data-radius="1000">1000 km (West Coast Mesh)</button>
         </div>
       </div>
 
@@ -2747,6 +2800,8 @@
   <!-- Offscreen Canvas for Deterministic Color Palette & Contrast Extraction -->
   <canvas id="colorExtractionCanvas" width="100" height="100" class="sr-only" aria-hidden="true"></canvas>
 
+  <!-- Leaflet JS for Privacy-Preserving True Interactive Map (Zero GPS Tracking) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="app.js"></script>
 </body>
 </html>

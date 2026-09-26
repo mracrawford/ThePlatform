@@ -13,6 +13,9 @@ import hashlib
 import secrets
 import socket
 import sys
+import math
+import urllib.request
+import urllib.parse
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -120,6 +123,136 @@ def verify_password(password, salt, expected_hash):
     pwd_hash, _ = hash_password(password, salt)
     return pwd_hash == expected_hash
 
+# ==============================================================================
+# TRUE GEOCODING & DISTANCE CALCULATION ENGINE (ZERO GPS TRACKING)
+# ==============================================================================
+KNOWN_LOCATIONS = {
+    "los banos, ca": (37.0592, -120.8505, "Los Banos, Merced County, California, United States"),
+    "los banos": (37.0592, -120.8505, "Los Banos, Merced County, California, United States"),
+    "pacheco blvd, los banos, ca": (37.0566, -120.8487, "Pacheco Boulevard, Los Banos, California, United States"),
+    "645 pacheco blvd, los banos, ca": (37.0566, -120.8487, "645 Pacheco Blvd, Los Banos, California, United States"),
+    "san francisco, ca": (37.7749, -122.4194, "San Francisco, California, United States"),
+    "san francisco": (37.7749, -122.4194, "San Francisco, California, United States"),
+    "north beach, san francisco, ca": (37.8012, -122.4090, "North Beach, San Francisco, California, United States"),
+    "north beach, sf": (37.8012, -122.4090, "North Beach, San Francisco, California, United States"),
+    "san francisco, ca (mission)": (37.7599, -122.4148, "Mission District, San Francisco, California, United States"),
+    "mission district, san francisco, ca": (37.7599, -122.4148, "Mission District, San Francisco, California, United States"),
+    "portland, or": (45.5152, -122.6784, "Portland, Multnomah County, Oregon, United States"),
+    "portland, or (hawthorne)": (45.5121, -122.6231, "Hawthorne, Portland, Oregon, United States"),
+    "portland": (45.5152, -122.6784, "Portland, Multnomah County, Oregon, United States"),
+    "seattle, wa": (47.6062, -122.3321, "Seattle, King County, Washington, United States"),
+    "seattle, wa (capitol hill)": (47.6253, -122.3222, "Capitol Hill, Seattle, Washington, United States"),
+    "seattle": (47.6062, -122.3321, "Seattle, King County, Washington, United States"),
+    "oakland, ca": (37.8044, -122.2712, "Oakland, Alameda County, California, United States"),
+    "berkeley, ca": (37.8715, -122.2730, "Berkeley, Alameda County, California, United States"),
+    "san jose, ca": (37.3382, -121.8863, "San Jose, Santa Clara County, California, United States"),
+    "sacramento, ca": (38.5816, -121.4944, "Sacramento, California, United States"),
+    "fresno, ca": (36.7468, -119.7726, "Fresno, California, United States")
+}
+
+def geocode_location(query, conn=None):
+    """
+    True geocoding from user text input (address, city, or zip). Zero GPS tracking.
+    Checks in-memory fast dict, then SQLite geocache table, then OpenStreetMap Nominatim.
+    Returns (lat, lon, formatted_address) or None.
+    """
+    if not query or not isinstance(query, str) or not query.strip():
+        return None
+    
+    clean_query = query.strip()
+    norm_key = clean_query.lower()
+    
+    # 1. Fast built-in lookup
+    if norm_key in KNOWN_LOCATIONS:
+        return KNOWN_LOCATIONS[norm_key]
+    
+    # 2. Check SQLite geocache table
+    close_conn = False
+    if conn is None:
+        conn = get_db()
+        close_conn = True
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT latitude, longitude, formatted_address FROM geocache WHERE LOWER(query) = LOWER(?)", (clean_query,))
+        row = cur.fetchone()
+        if row and row['latitude'] is not None and row['longitude'] is not None:
+            if close_conn:
+                conn.close()
+            return (float(row['latitude']), float(row['longitude']), row['formatted_address'])
+    except Exception:
+        pass
+    
+    # 3. Query OpenStreetMap Nominatim with retry
+    try:
+        clean_search = re.sub(r'\s*\([^)]*\)', '', clean_query).strip()
+        url = 'https://nominatim.openstreetmap.org/search?' + urllib.parse.urlencode({
+            'q': clean_search if clean_search else clean_query,
+            'format': 'json',
+            'limit': 1
+        })
+        req = urllib.request.Request(url, headers={'User-Agent': 'ThePlatform/2.0 (mracrawford@gmail.com)'})
+        with urllib.request.urlopen(req, timeout=4) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if data and len(data) > 0:
+                lat = float(data[0]['lat'])
+                lon = float(data[0]['lon'])
+                addr = data[0].get('display_name', clean_query)
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT OR REPLACE INTO geocache (query, latitude, longitude, formatted_address, created_at) VALUES (?, ?, ?, ?, ?)",
+                        (clean_query, lat, lon, addr, int(time.time()))
+                    )
+                    conn.commit()
+                except Exception:
+                    pass
+                if close_conn:
+                    conn.close()
+                return (lat, lon, addr)
+    except Exception:
+        pass
+    
+    if close_conn:
+        conn.close()
+    return None
+
+def calculate_distance_and_bearing(lat1, lon1, lat2, lon2):
+    """
+    Computes true Haversine distance in miles and km, compass bearing angle (0-360 deg),
+    and 8-point compass cardinal direction.
+    """
+    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+        return {
+            "distance_miles": 0.0,
+            "distance_km": 0.0,
+            "bearing_deg": 0.0,
+            "compass_dir": "Local"
+        }
+    
+    R = 3958.8  # Earth radius in miles
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    dist_miles = round(R * c, 1)
+    dist_km = round(dist_miles * 1.60934, 1)
+    
+    # Bearing in degrees (0 to 360, 0=North, 90=East, 180=South, 270=West)
+    y = math.sin(dlon) * math.cos(math.radians(lat2))
+    x = math.cos(math.radians(lat1)) * math.sin(math.radians(lat2)) - math.sin(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.cos(dlon)
+    bearing = round((math.degrees(math.atan2(y, x)) + 360) % 360, 1)
+    
+    cardinals = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    cardinal = cardinals[round(bearing / 45) % 8]
+    
+    return {
+        "distance_miles": dist_miles,
+        "distance_km": dist_km,
+        "bearing_deg": bearing,
+        "compass_dir": cardinal
+    }
+
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
@@ -198,9 +331,24 @@ def init_db():
         cursor.execute("ALTER TABLE users ADD COLUMN motto TEXT DEFAULT ''")
     if 'playlist' not in existing_cols:
         cursor.execute("ALTER TABLE users ADD COLUMN playlist TEXT DEFAULT '[]'")
+    if 'latitude' not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN latitude REAL DEFAULT NULL")
+    if 'longitude' not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN longitude REAL DEFAULT NULL")
+    if 'formatted_address' not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN formatted_address TEXT DEFAULT NULL")
 
-    # Ensure Adam account has full admin and commons verification, but NEVER overwrite custom profile details (dob, interests, motto, avatar, banner)
-    cursor.execute("UPDATE users SET is_admin = 1, commons_verified = 1 WHERE id = 'usr-adam' OR LOWER(handle) = '@adam' OR LOWER(email) = 'mracrawford@gmail.com'")
+    # Ensure Adam account has full admin and commons verification, and true Los Banos location coordinates
+    cursor.execute("""
+    UPDATE users SET 
+        is_admin = 1, 
+        commons_verified = 1,
+        location = CASE WHEN location = '' OR location IS NULL THEN 'Los Banos, CA' ELSE location END,
+        latitude = COALESCE(latitude, 37.0592),
+        longitude = COALESCE(longitude, -120.8505),
+        formatted_address = COALESCE(formatted_address, 'Los Banos, Merced County, California, United States')
+    WHERE id = 'usr-adam' OR LOWER(handle) = '@adam' OR LOWER(email) = 'mracrawford@gmail.com'
+    """)
 
     # Banned IPs Table
     cursor.execute('''
@@ -359,10 +507,33 @@ def init_db():
         desc TEXT NOT NULL,
         image_url TEXT,
         location TEXT,
+        latitude REAL DEFAULT NULL,
+        longitude REAL DEFAULT NULL,
+        formatted_address TEXT DEFAULT NULL,
         status TEXT DEFAULT 'active',
         is_example INTEGER DEFAULT 0,
         created_at INTEGER,
         FOREIGN KEY(author_id) REFERENCES users(id)
+    )
+    ''')
+
+    cursor.execute("PRAGMA table_info(commons_items)")
+    existing_ci_cols = [row['name'] for row in cursor.fetchall()]
+    if 'latitude' not in existing_ci_cols:
+        cursor.execute("ALTER TABLE commons_items ADD COLUMN latitude REAL DEFAULT NULL")
+    if 'longitude' not in existing_ci_cols:
+        cursor.execute("ALTER TABLE commons_items ADD COLUMN longitude REAL DEFAULT NULL")
+    if 'formatted_address' not in existing_ci_cols:
+        cursor.execute("ALTER TABLE commons_items ADD COLUMN formatted_address TEXT DEFAULT NULL")
+
+    # Geocache Table for Instant, Zero-Latency Coordinates (Zero GPS)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS geocache (
+        query TEXT PRIMARY KEY,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        formatted_address TEXT NOT NULL,
+        created_at INTEGER
     )
     ''')
 
@@ -640,19 +811,30 @@ def seed_example_data(cursor, conn):
 
     # Seed Commons items marked clearly as EXAMPLES
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, is_example, status, created_at)
-    VALUES ('aid-ex-1', 'elena', 'offer', 'food', 'Fresh Artisan Sourdough Boule', '36-hour cold fermented sourdough baked this morning. Crisp crust, open crumb. [ARCHIVED EXAMPLE LISTING]', 'assets/sourdough.jpg', 'Seattle, WA (Capitol Hill)', 1, 'archived_example', ?)
+    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    VALUES ('aid-ex-1', 'elena', 'offer', 'food', 'Fresh Artisan Sourdough Boule', '36-hour cold fermented sourdough baked this morning. Crisp crust, open crumb. [ARCHIVED EXAMPLE LISTING]', 'assets/sourdough.jpg', 'Seattle, WA (Capitol Hill)', 47.6253, -122.3222, 'Capitol Hill, Seattle, Washington, United States', 1, 'archived_example', ?)
     ''', (now - 3600 * 12,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, is_example, status, created_at)
-    VALUES ('aid-ex-2', 'maya', 'offer', 'skills', '35mm Film Camera Loan & Darkroom Coaching', 'Loan of mechanical film body with 50mm f/1.8 lens, plus darkroom coaching session. [ARCHIVED EXAMPLE LISTING]', 'assets/vintage-camera.jpg', 'San Francisco, CA (Mission)', 1, 'archived_example', ?)
+    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    VALUES ('aid-ex-2', 'maya', 'offer', 'skills', '35mm Film Camera Loan & Darkroom Coaching', 'Loan of mechanical film body with 50mm f/1.8 lens, plus darkroom coaching session. [ARCHIVED EXAMPLE LISTING]', 'assets/vintage-camera.jpg', 'San Francisco, CA (Mission)', 37.7599, -122.4148, 'Mission District, San Francisco, California, United States', 1, 'archived_example', ?)
     ''', (now - 3600 * 18,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, is_example, status, created_at)
-    VALUES ('aid-ex-3', 'julian', 'offer', 'skills', 'Woodworking & Tool Sharpening Aid', 'Bring dull chisels or broken wooden joinery for repair assistance. [ARCHIVED EXAMPLE LISTING]', NULL, 'Portland, OR (Hawthorne)', 1, 'archived_example', ?)
+    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    VALUES ('aid-ex-3', 'julian', 'offer', 'skills', 'Woodworking & Tool Sharpening Aid', 'Bring dull chisels or broken wooden joinery for repair assistance. [ARCHIVED EXAMPLE LISTING]', NULL, 'Portland, OR (Hawthorne)', 45.5121, -122.6231, 'Hawthorne, Portland, Oregon, United States', 1, 'archived_example', ?)
     ''', (now - 3600 * 24,))
+
+    # Seed 2 Hyper-Local Active Mutual Aid Listings in Los Banos, CA
+    cursor.execute('''
+    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    VALUES ('aid-lb-lemons', 'usr-adam', 'offer', 'food', 'Fresh Backyard Meyer Lemons & Fragrant Rosemary', 'Freshly picked from the backyard lemon tree in Los Banos. Sweet, juicy, and pesticide-free. Come take a basket!', NULL, 'Los Banos, CA', 37.0592, -120.8505, 'Los Banos, Merced County, California, United States', 0, 'active', ?)
+    ''', (now - 3600 * 2,))
+
+    cursor.execute('''
+    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    VALUES ('aid-lb-bikepump', 'usr-adam', 'offer', 'tools', 'Heavy-Duty Bicycle Floor Pump & Repair Stand Loan', 'Professional-grade Topeak floor pump with pressure gauge and Park Tool portable stand. Available for community loan.', NULL, 'Pacheco Blvd, Los Banos, CA', 37.0566, -120.8487, 'Pacheco Blvd, Los Banos, California, United States', 0, 'active', ?)
+    ''', (now - 3600 * 4,))
 
     # Seed one simulated suspicious Bot account for the Admin console demonstration
     cursor.execute('''
@@ -1049,8 +1231,59 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"lounges": rooms})
             return
 
-        # 0d. GET /api/commons/radar - Mutual Aid Proximity Radar Clusters
+        # 0d. GET /api/commons/radar - Mutual Aid Proximity Radar Clusters (True Geocoding & Distances)
         if path == '/api/commons/radar':
+            viewer_id = (query.get('user_id') and query.get('user_id')[0]) or self.get_current_user_id()
+            viewer_row = resolve_user(cur, viewer_id) if viewer_id else None
+            viewer = dict(viewer_row) if viewer_row else None
+            
+            # Determine viewer coordinates
+            viewer_lat = None
+            viewer_lon = None
+            viewer_addr = "Los Banos, CA"
+            
+            # Check query params for explicit coordinates
+            if query.get('lat') and query.get('lon'):
+                try:
+                    viewer_lat = float(query['lat'][0])
+                    viewer_lon = float(query['lon'][0])
+                    viewer_addr = "Custom Coordinates"
+                except:
+                    pass
+
+            if viewer_lat is None and viewer:
+                if viewer.get('latitude') is not None and viewer.get('longitude') is not None:
+                    viewer_lat = float(viewer['latitude'])
+                    viewer_lon = float(viewer['longitude'])
+                    viewer_addr = viewer.get('location') or viewer.get('formatted_address') or "Home Location"
+                elif viewer.get('location'):
+                    g = geocode_location(viewer['location'], conn=conn)
+                    if g:
+                        viewer_lat, viewer_lon, viewer_addr = g
+                        cur.execute("UPDATE users SET latitude = ?, longitude = ?, formatted_address = ? WHERE id = ?", (viewer_lat, viewer_lon, viewer_addr, viewer['id']))
+                        conn.commit()
+
+            # Fallback to Adam / Los Banos, CA if not logged in or viewer has no coordinates
+            if viewer_lat is None:
+                cur.execute("SELECT latitude, longitude, location, formatted_address FROM users WHERE id = 'usr-adam' OR handle = '@adam'")
+                adam_row = cur.fetchone()
+                adam = dict(adam_row) if adam_row else None
+                if adam and adam.get('latitude') is not None:
+                    viewer_lat = float(adam['latitude'])
+                    viewer_lon = float(adam['longitude'])
+                    viewer_addr = adam.get('location') or "Los Banos, CA"
+                else:
+                    viewer_lat = 37.0592
+                    viewer_lon = -120.8505
+                    viewer_addr = "Los Banos, CA"
+
+            radius_km = 50.0
+            if query.get('radius_km'):
+                try:
+                    radius_km = float(query['radius_km'][0])
+                except:
+                    radius_km = 50.0
+
             cur.execute("""
             SELECT ci.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar
             FROM commons_items ci
@@ -1058,26 +1291,71 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             WHERE ci.status = 'active' OR ci.status = 'archived_example'
             ORDER BY ci.created_at DESC
             """)
-            items = [dict(r) for r in cur.fetchall()]
-            conn.close()
+            raw_items = [dict(r) for r in cur.fetchall()]
 
             radar_points = []
-            for idx, it in enumerate(items):
-                ring = (idx % 3) + 1  # 1 = <1mi (local), 2 = 1-3mi (neighborhood), 3 = 3-8mi (community)
-                angle_deg = (idx * 67 + 25) % 360
-                dist_miles = round(0.4 + (ring - 1) * 1.8 + ((idx * 7) % 10) * 0.1, 1)
-                dist_km = round(dist_miles * 1.609, 1)
+            for it in raw_items:
+                item_lat = it.get('latitude')
+                item_lon = it.get('longitude')
+                # Geocode on the fly if coordinates missing
+                if (item_lat is None or item_lon is None) and it.get('location'):
+                    g = geocode_location(it['location'], conn=conn)
+                    if g:
+                        item_lat, item_lon, it_addr = g
+                        it['latitude'] = item_lat
+                        it['longitude'] = item_lon
+                        it['formatted_address'] = it_addr
+                        cur.execute("UPDATE commons_items SET latitude = ?, longitude = ?, formatted_address = ? WHERE id = ?", (item_lat, item_lon, it_addr, it['id']))
+                        conn.commit()
+                
+                # Calculate real distance and bearing if coordinates exist
+                if item_lat is not None and item_lon is not None:
+                    geo_info = calculate_distance_and_bearing(viewer_lat, viewer_lon, item_lat, item_lon)
+                    dist_m = geo_info['distance_miles']
+                    dist_k = geo_info['distance_km']
+                    bearing = geo_info['bearing_deg']
+                    cardinal = geo_info['compass_dir']
+                else:
+                    dist_m = 999.0
+                    dist_k = 999.0
+                    bearing = 0.0
+                    cardinal = 'Local'
+                
+                # Determine radar ring
+                if dist_k <= 5.0:
+                    ring = 1  # Walking / Local
+                elif dist_k <= 25.0:
+                    ring = 2  # Neighborhood / Community
+                elif dist_k <= 100.0:
+                    ring = 3  # Regional Metro
+                else:
+                    ring = 4  # Extended Network
+                
+                loc_name = it.get('location') or 'Local Mesh'
+                
                 radar_points.append({
                     **it,
                     "ring": ring,
-                    "angle_deg": angle_deg,
-                    "distance_miles": dist_miles,
-                    "distance_km": dist_km,
-                    "fuzzy_neighborhood": ["Mission District", "Hayes Valley", "Sunset District", "Berkeley Hills", "Oakland Lake"][idx % 5],
+                    "angle_deg": bearing,
+                    "bearing_deg": bearing,
+                    "compass_dir": cardinal,
+                    "distance_miles": dist_m,
+                    "distance_km": dist_k,
+                    "fuzzy_neighborhood": loc_name,
                     "urgency": "high" if it['type'] == 'request' else "standard"
                 })
 
+            conn.close()
+
+            # Sort radar points by true distance
+            radar_points.sort(key=lambda x: x['distance_km'])
+
             self.send_json(200, {
+                "viewer": {
+                    "latitude": viewer_lat,
+                    "longitude": viewer_lon,
+                    "location": viewer_addr
+                },
                 "radar_points": radar_points,
                 "clusters": radar_points,
                 "total_nearby": len(radar_points)
@@ -1222,16 +1500,82 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             })
             return
 
-        # 3. GET /api/commons - The Mutual Aid Marketplace Items
+        # 3. GET /api/commons - The Mutual Aid Marketplace Items (With True Distances)
         if path == '/api/commons':
+            viewer_id = (query.get('user_id') and query.get('user_id')[0]) or self.get_current_user_id()
+            viewer_row = resolve_user(cur, viewer_id) if viewer_id else None
+            viewer = dict(viewer_row) if viewer_row else None
+            viewer_lat = None
+            viewer_lon = None
+            viewer_location_name = "Los Banos, CA"
+
+            if viewer:
+                if viewer.get('latitude') is not None and viewer.get('longitude') is not None:
+                    viewer_lat = float(viewer['latitude'])
+                    viewer_lon = float(viewer['longitude'])
+                    viewer_location_name = viewer.get('location') or viewer.get('formatted_address') or "Home Location"
+                elif viewer.get('location'):
+                    g = geocode_location(viewer['location'], conn=conn)
+                    if g:
+                        viewer_lat, viewer_lon, viewer_location_name = g
+                        cur.execute("UPDATE users SET latitude = ?, longitude = ?, formatted_address = ? WHERE id = ?", (viewer_lat, viewer_lon, viewer_location_name, viewer['id']))
+                        conn.commit()
+
+            # If guest or viewer without location, fallback to Adam in Los Banos
+            if viewer_lat is None:
+                cur.execute("SELECT latitude, longitude, location, formatted_address FROM users WHERE id = 'usr-adam' OR handle = '@adam'")
+                adm_row = cur.fetchone()
+                adm = dict(adm_row) if adm_row else None
+                if adm and adm.get('latitude') is not None:
+                    viewer_lat = float(adm['latitude'])
+                    viewer_lon = float(adm['longitude'])
+                    viewer_location_name = adm.get('location') or "Los Banos, CA"
+                else:
+                    viewer_lat = 37.0592
+                    viewer_lon = -120.8505
+                    viewer_location_name = "Los Banos, CA"
+
             cur.execute("""
             SELECT c.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.karma, u.motto
             FROM commons_items c JOIN users u ON c.author_id = u.id
             ORDER BY c.is_example ASC, c.created_at DESC
             """)
             items = [dict(row) for row in cur.fetchall()]
+
+            for it in items:
+                item_lat = it.get('latitude')
+                item_lon = it.get('longitude')
+                if (item_lat is None or item_lon is None) and it.get('location'):
+                    g = geocode_location(it['location'], conn=conn)
+                    if g:
+                        item_lat, item_lon, it_addr = g
+                        it['latitude'] = item_lat
+                        it['longitude'] = item_lon
+                        it['formatted_address'] = it_addr
+                        cur.execute("UPDATE commons_items SET latitude = ?, longitude = ?, formatted_address = ? WHERE id = ?", (item_lat, item_lon, it_addr, it['id']))
+                        conn.commit()
+
+                if viewer_lat is not None and item_lat is not None:
+                    geo = calculate_distance_and_bearing(viewer_lat, viewer_lon, item_lat, item_lon)
+                    it['distance_miles'] = geo['distance_miles']
+                    it['distance_km'] = geo['distance_km']
+                    it['bearing_deg'] = geo['bearing_deg']
+                    it['compass_dir'] = geo['compass_dir']
+                else:
+                    it['distance_miles'] = None
+                    it['distance_km'] = None
+                    it['bearing_deg'] = None
+                    it['compass_dir'] = None
+
             conn.close()
-            self.send_json(200, {"items": items})
+            self.send_json(200, {
+                "items": items,
+                "viewer": {
+                    "latitude": viewer_lat,
+                    "longitude": viewer_lon,
+                    "location": viewer_location_name
+                }
+            })
             return
 
         # 4. GET /api/admin/bot-monitor (Admin-Only)
@@ -2260,6 +2604,12 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
             commons_verified = 1 if is_admin else 0
 
+            # Geocode user input location strictly from their own text (Zero GPS Tracking)
+            geo_res = geocode_location(location, conn=conn) if location else None
+            lat = geo_res[0] if geo_res else None
+            lon = geo_res[1] if geo_res else None
+            fmt_addr = geo_res[2] if geo_res else (location or None)
+
             cur.execute("""
             INSERT INTO users (
                 id, handle, name, email, phone, bio, avatar, banner,
@@ -2267,14 +2617,16 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 is_banned, ban_reason, registered_ip, bot_score, bot_flags,
                 entropy_score, karma, aesthetic_name, font_heading, font_body, created_at,
                 password_hash, password_salt, passions, subtopics, avatars, youtube_url, location,
+                latitude, longitude, formatted_address,
                 dob, show_zodiac, zodiac_sign, commons_verified, motto
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 10, ?, ?, "'Inter', sans-serif", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 10, ?, ?, "'Inter', sans-serif", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 user_id, handle, name, email, phone, bio, avatar, banner,
                 music_title, music_source, privacy, is_admin, auto_banned, ban_reason,
                 client_ip, bot_score, json.dumps(bot_flags), entropy_score,
                 aesthetic_name, font_heading, now,
                 pwd_hash, pwd_salt, json.dumps(passions), json.dumps(subtopics), json.dumps(avatars), youtube_url, location,
+                lat, lon, fmt_addr,
                 dob, show_zodiac, zodiac_sign, commons_verified, motto
             ))
 
@@ -2353,11 +2705,23 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             zodiac_sign = compute_zodiac_sign(dob) if dob else None
             motto = sanitize_motto(data.get('motto')) if 'motto' in data else None
 
+            # Geocode updated location strictly from user input (Zero GPS Tracking)
+            lat = None
+            lon = None
+            fmt_addr = None
+            if location is not None and location.strip():
+                geo_res = geocode_location(location, conn=conn)
+                if geo_res:
+                    lat, lon, fmt_addr = geo_res
+
             cur.execute("""
             UPDATE users SET
                 name = COALESCE(?, name),
                 bio = COALESCE(?, bio),
                 location = COALESCE(?, location),
+                latitude = CASE WHEN ? IS NOT NULL THEN ? ELSE latitude END,
+                longitude = CASE WHEN ? IS NOT NULL THEN ? ELSE longitude END,
+                formatted_address = CASE WHEN ? IS NOT NULL THEN ? ELSE formatted_address END,
                 privacy = COALESCE(?, privacy),
                 aesthetic_name = COALESCE(?, aesthetic_name),
                 banner = COALESCE(?, banner),
@@ -2374,7 +2738,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 playlist = CASE WHEN ? IS NOT NULL THEN ? ELSE playlist END
             WHERE id = ?
             """, (
-                name, bio, location, privacy, aesthetic_name,
+                name, bio, location,
+                lat, lat, lon, lon, fmt_addr, fmt_addr,
+                privacy, aesthetic_name,
                 banner, avatar, youtube_url, music_title,
                 dob, show_zodiac, zodiac_sign, motto,
                 json.dumps(passions) if passions is not None else None,
@@ -2692,17 +3058,57 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                     self.send_json(429, {"error": "Request Quota Reached: Only 1 active request permitted per user."})
                     return
 
+            # Determine item location (defaults to author profile location if blank)
+            if not location:
+                location = author.get('location') or ''
+
+            # Geocode listing location from user text input (Zero GPS Tracking)
+            geo_res = geocode_location(location, conn=conn) if location else None
+            item_lat = geo_res[0] if geo_res else author.get('latitude')
+            item_lon = geo_res[1] if geo_res else author.get('longitude')
+            item_addr = geo_res[2] if geo_res else (location or author.get('formatted_address'))
+
             aid_id = 'aid-' + uuid.uuid4().hex[:8]
             now = int(time.time())
 
             cur.execute("""
-            INSERT INTO commons_items (id, author_id, type, category, title, desc, image_url, location, status, is_example, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?)
-            """, (aid_id, author_id, item_type, category, title, desc, image_url, location, now))
+            INSERT INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, status, is_example, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?)
+            """, (aid_id, author_id, item_type, category, title, desc, image_url, location, item_lat, item_lon, item_addr, now))
             conn.commit()
             conn.close()
 
-            self.send_json(201, {"message": "Mutual aid listing published", "item_id": aid_id})
+            self.send_json(201, {
+                "message": "Mutual aid listing published",
+                "item_id": aid_id,
+                "latitude": item_lat,
+                "longitude": item_lon,
+                "formatted_address": item_addr
+            })
+            return
+
+        # POST /api/geocode - Resolve raw user text address to true coords without GPS
+        if path == '/api/geocode':
+            query_str = (data.get('query') or data.get('location') or '').strip()
+            if not query_str:
+                conn.close()
+                self.send_json(400, {"error": "Missing location query"})
+                return
+            
+            res = geocode_location(query_str, conn=conn)
+            conn.close()
+            if res:
+                self.send_json(200, {
+                    "success": True,
+                    "latitude": res[0],
+                    "longitude": res[1],
+                    "formatted_address": res[2]
+                })
+            else:
+                self.send_json(404, {
+                    "success": False,
+                    "error": "Location could not be geocoded."
+                })
             return
 
         # 4. POST /api/admin/insta-ban (ADMIN ONLY) - Perma-ban User & Insta-Ban IP

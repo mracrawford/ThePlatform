@@ -98,14 +98,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   const defaultHostId = STATE.currentUser?.id || 'usr-adam';
   loadPlatform(defaultHostId, false);
 
-  // Route to Platform if hash or param is set; otherwise default Home view to Topics & Trending
+  // Route to Platform or Commons if hash or param is set; otherwise default Home view to Topics & Trending
   const currentHash = (window.location.hash || '').toLowerCase();
   const currentParams = new URLSearchParams(window.location.search);
   if (currentHash === '#platform' || currentHash === '#platforms' || currentParams.get('tab') === 'platform' || currentParams.get('tab') === 'platforms') {
     switchToPlatformTab(null, false);
+  } else if (currentHash === '#commons' || currentHash === '#map' || currentHash === '#radar' || currentParams.get('tab') === 'commons') {
+    const commonsTab = document.getElementById('navTabCommons') || document.querySelector('.nav-tab-btn[data-tab="commons"]');
+    commonsTab?.click();
+    if (currentHash === '#map' || currentParams.get('view') === 'map') {
+      setTimeout(() => document.getElementById('commonsViewMapBtn')?.click(), 120);
+    } else if (currentHash === '#radar' || currentParams.get('view') === 'radar') {
+      setTimeout(() => document.getElementById('commonsViewRadarBtn')?.click(), 120);
+    }
   } else {
     document.getElementById('navTabTopics')?.click();
     await fetchAndRenderTopics();
+  }
+
+  if (currentParams.get('modal') === 'register' || currentHash === '#register') {
+    setTimeout(() => document.getElementById('registerModal')?.showModal(), 150);
+  } else if (currentParams.get('modal') === 'edit' || currentHash === '#edit') {
+    setTimeout(() => openEditProfileModal(), 150);
   }
 });
 
@@ -285,9 +299,20 @@ async function refreshUsers() {
 
 async function refreshCommons() {
   try {
-    const res = await apiRequest('/api/commons');
+    const userId = STATE.currentUser ? STATE.currentUser.id : '';
+    const res = await apiRequest(`/api/commons?user_id=${encodeURIComponent(userId)}`);
     STATE.commonsItems = res.items || [];
+    if (res.viewer) {
+      STATE.commonsViewer = res.viewer;
+      const locTextEl = document.getElementById('commonsViewerLocationText');
+      if (locTextEl) {
+        locTextEl.textContent = res.viewer.location || 'Los Banos, CA';
+      }
+    }
     renderCommonsGrid();
+    if (window.updateCommonsLeafletMarkers) {
+      window.updateCommonsLeafletMarkers();
+    }
   } catch (e) {
     console.warn('Could not fetch commons from backend.');
   }
@@ -1955,7 +1980,185 @@ function triggerAdHominemShield(flaggedSnippet) {
   };
 }
 
-// --- THE COMMONS (MUTUAL AID MARKETPLACE) ---
+// --- THE COMMONS (MUTUAL AID MARKETPLACE & TRUE MAPPING) ---
+let commonsLeafletMapInstance = null;
+let commonsLeafletMarkersGroup = null;
+
+function attachLocationGeocodePreview(inputId, feedbackId) {
+  const inputEl = document.getElementById(inputId);
+  const feedbackEl = document.getElementById(feedbackId);
+  if (!inputEl || !feedbackEl) return;
+
+  let debounceTimer = null;
+  const doGeocode = async () => {
+    const query = inputEl.value.trim();
+    if (!query) {
+      feedbackEl.classList.add('hidden');
+      feedbackEl.textContent = '';
+      return;
+    }
+
+    feedbackEl.className = 'location-feedback-pill loading';
+    feedbackEl.textContent = 'Resolving location coordinates (Zero GPS)...';
+    feedbackEl.classList.remove('hidden');
+
+    try {
+      const res = await apiRequest('/api/geocode', 'POST', { query });
+      if (res && res.latitude && res.longitude) {
+        feedbackEl.className = 'location-feedback-pill success';
+        const displayAddr = res.formatted_address || `${res.latitude.toFixed(4)}, ${res.longitude.toFixed(4)}`;
+        feedbackEl.innerHTML = `📍 Recognized: <strong>${escapeHtml(displayAddr)}</strong> (${res.latitude.toFixed(4)}°, ${res.longitude.toFixed(4)}°)`;
+      } else {
+        feedbackEl.className = 'location-feedback-pill warning';
+        feedbackEl.textContent = '📍 Approximate location will be used';
+      }
+    } catch (e) {
+      feedbackEl.className = 'location-feedback-pill warning';
+      feedbackEl.textContent = '📍 Location registered for local mesh';
+    }
+  };
+
+  inputEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(doGeocode, 600);
+  });
+
+  inputEl.addEventListener('blur', () => {
+    clearTimeout(debounceTimer);
+    if (inputEl.value.trim()) doGeocode();
+  });
+}
+
+function initOrUpdateCommonsLeafletMap() {
+  if (typeof L === 'undefined') {
+    console.warn('Leaflet library is still loading or unavailable.');
+    return;
+  }
+  const mapEl = document.getElementById('commonsLeafletMap');
+  if (!mapEl) return;
+
+  const centerLat = (STATE.commonsViewer && STATE.commonsViewer.latitude) || 37.0592;
+  const centerLon = (STATE.commonsViewer && STATE.commonsViewer.longitude) || -120.8505;
+
+  if (!commonsLeafletMapInstance) {
+    commonsLeafletMapInstance = L.map('commonsLeafletMap', {
+      zoomControl: true,
+      scrollWheelZoom: true
+    }).setView([centerLat, centerLon], 12);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(commonsLeafletMapInstance);
+
+    commonsLeafletMarkersGroup = L.featureGroup().addTo(commonsLeafletMapInstance);
+  }
+
+  commonsLeafletMapInstance.invalidateSize();
+  setTimeout(() => {
+    if (commonsLeafletMapInstance) {
+      commonsLeafletMapInstance.invalidateSize();
+    }
+  }, 100);
+  setTimeout(() => {
+    if (commonsLeafletMapInstance) {
+      commonsLeafletMapInstance.invalidateSize();
+    }
+  }, 300);
+
+  commonsLeafletMarkersGroup.clearLayers();
+
+  // 1. Add User Home Beacon Marker
+  const vLat = (STATE.commonsViewer && STATE.commonsViewer.latitude) || 37.0592;
+  const vLon = (STATE.commonsViewer && STATE.commonsViewer.longitude) || -120.8505;
+  const vName = (STATE.currentUser && STATE.currentUser.name) || (STATE.commonsViewer && STATE.commonsViewer.name) || 'You';
+  const vAddr = (STATE.commonsViewer && (STATE.commonsViewer.formatted_address || STATE.commonsViewer.location)) || 'Los Banos, CA';
+
+  const homeIcon = L.divIcon({
+    className: 'map-home-beacon-pin',
+    html: '<div class="map-home-beacon-wrap"><div class="map-home-beacon-ring"></div><div class="map-home-beacon-center"></div></div>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  });
+
+  const homeMarker = L.marker([vLat, vLon], { icon: homeIcon, zIndexOffset: 1000 });
+  homeMarker.bindPopup(`
+    <div class="map-popup-card">
+      <div class="map-popup-header">
+        <span style="font-size:1.1rem;">📍</span>
+        <strong style="color:#38bdf8;">Your Home Base (Zero GPS)</strong>
+      </div>
+      <div style="font-size:0.84rem; color:#f1f5f9; font-weight:600; margin-bottom:2px;">${escapeHtml(vName)}</div>
+      <div style="font-size:0.75rem; color:#94a3b8; margin-bottom:6px;">${escapeHtml(vAddr)}</div>
+      <div style="font-size:0.70rem; color:#64748b; border-top:1px solid rgba(255,255,255,0.08); padding-top:4px;">
+        Coordinates resolved strictly from your input address. All distances in The Commons calculate from here.
+      </div>
+    </div>
+  `, { minWidth: 200, maxWidth: 260 });
+  commonsLeafletMarkersGroup.addLayer(homeMarker);
+
+  // 2. Add Commons items markers
+  (STATE.commonsItems || []).forEach(item => {
+    if (item.latitude === null || item.latitude === undefined ||
+        item.longitude === null || item.longitude === undefined) {
+      return;
+    }
+    const isOffer = item.type === 'offer';
+    const pinIcon = L.divIcon({
+      className: 'leaflet-item-pin-wrapper',
+      html: `<div class="map-marker-pin ${item.type}">${isOffer ? '🎁' : '🆘'}</div>`,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+      popupAnchor: [0, -18]
+    });
+
+    const marker = L.marker([item.latitude, item.longitude], { icon: pinIcon });
+
+    const distStr = (item.distance_miles !== null && item.distance_miles !== undefined)
+      ? (item.distance_miles < 0.1 ? '<0.1 mi away' : `${item.distance_miles.toFixed(1)} mi away`)
+      : '';
+    const dirStr = item.compass_dir ? ` (${item.compass_dir})` : '';
+
+    marker.bindPopup(`
+      <div class="map-popup-card">
+        <div class="map-popup-header">
+          <span class="aid-type-badge ${item.type}">${isOffer ? '🎁 Free Offer' : '🆘 Community Need'}</span>
+          <span style="font-size:0.72rem; color:#94a3b8; margin-left:auto;">🏷️ ${escapeHtml(item.category || 'Commons')}</span>
+        </div>
+        <h4 class="map-popup-title">${escapeHtml(item.title)}</h4>
+        <p class="map-popup-desc">${escapeHtml(item.desc || '')}</p>
+        <div class="map-popup-meta">
+          <span>📍 ${escapeHtml(item.location || 'Local')}</span>
+          ${distStr ? `<span class="map-popup-dist">📏 ${distStr}${dirStr}</span>` : ''}
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <span style="font-size:0.72rem; color:#94a3b8;">by ${escapeHtml(item.author_name || 'Member')}</span>
+          ${item.is_example === 1 ? '<span style="font-size:0.68rem; color:#f59e0b;">Archived Demo</span>' : `
+            <button class="btn btn-xs btn-primary" onclick="claimAidItem('${item.id}')">
+              ${isOffer ? 'Claim / Connect' : 'Offer Help'}
+            </button>
+          `}
+        </div>
+      </div>
+    `, { minWidth: 220, maxWidth: 280 });
+
+    commonsLeafletMarkersGroup.addLayer(marker);
+  });
+
+  // Fit bounds to frame all markers
+  try {
+    const layers = commonsLeafletMarkersGroup.getLayers();
+    if (layers.length > 1) {
+      commonsLeafletMapInstance.fitBounds(commonsLeafletMarkersGroup.getBounds().pad(0.15), { maxZoom: 14 });
+    } else if (layers.length === 1) {
+      commonsLeafletMapInstance.setView([vLat, vLon], 13);
+    }
+  } catch (e) {
+    console.warn('Map fit bounds warning:', e);
+  }
+}
+window.updateCommonsLeafletMarkers = initOrUpdateCommonsLeafletMap;
+
 function initCommonsMarketplace() {
   const filterBtns = document.querySelectorAll('.filter-pill');
   filterBtns.forEach(btn => {
@@ -1964,6 +2167,33 @@ function initCommonsMarketplace() {
       btn.classList.add('active');
       STATE.commonsFilter = btn.dataset.filter;
       renderCommonsGrid();
+    });
+  });
+
+  // View Mode Tabs: Grid / True Map / Proximity Radar
+  const viewTabs = document.querySelectorAll('#commonsViewTabs .view-tab-btn');
+  const gridEl = document.getElementById('commonsGrid');
+  const mapContainer = document.getElementById('commonsMapContainer');
+
+  viewTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const mode = tab.dataset.view;
+      if (mode === 'radar') {
+        openProximityRadarModal();
+        return;
+      }
+
+      viewTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      if (mode === 'map') {
+        gridEl?.classList.add('hidden');
+        mapContainer?.classList.remove('hidden');
+        initOrUpdateCommonsLeafletMap();
+      } else {
+        mapContainer?.classList.add('hidden');
+        gridEl?.classList.remove('hidden');
+      }
     });
   });
 
@@ -1979,6 +2209,8 @@ function initCommonsMarketplace() {
     }
     openNewAidModal();
   });
+
+  attachLocationGeocodePreview('aidItemLocation', 'aidLocationFeedback');
 }
 
 function renderCommonsGrid(searchQuery = '') {
@@ -2019,6 +2251,13 @@ function renderCommonsGrid(searchQuery = '') {
       imgHtml = `<div class="aid-image-attachment"><img src="${item.image_url}" alt="${item.title}"></div>`;
     }
 
+    let distBadge = '';
+    if (item.distance_miles !== null && item.distance_miles !== undefined) {
+      const distStr = item.distance_miles < 0.1 ? '<0.1 mi' : item.distance_miles.toFixed(1) + ' mi';
+      const dirStr = item.compass_dir ? ` (${item.compass_dir})` : '';
+      distBadge = `<span class="aid-distance-badge" title="True physical distance calculated from your input address (Zero GPS)">📏 ${distStr}${dirStr} away</span>`;
+    }
+
     card.innerHTML = `
       <div class="aid-card-top">
         ${isExample ? `
@@ -2029,7 +2268,8 @@ function renderCommonsGrid(searchQuery = '') {
 
         <div class="aid-badge-row">
           <span class="aid-type-badge ${item.type}">${item.type === 'offer' ? '🎁 Free Offer' : '🆘 Community Need'}</span>
-          <span class="aid-category-tag">🏷️ ${item.category.toUpperCase()} • 📍 ${item.location || 'Local'}</span>
+          <span class="aid-category-tag">🏷️ ${item.category.toUpperCase()} • 📍 ${escapeHtml(item.location || 'Local')}</span>
+          ${distBadge}
         </div>
         <h3 class="aid-title">${escapeHtml(item.title)}</h3>
         <p class="aid-desc">${escapeHtml(item.desc)}</p>
@@ -2117,11 +2357,17 @@ function openNewAidModal() {
 
   modal.showModal();
 
+  const locInput = document.getElementById('aidItemLocation');
+  if (locInput) {
+    locInput.value = (STATE.currentUser && STATE.currentUser.location) || '';
+  }
+
   submitBtn.onclick = async () => {
     const title = document.getElementById('aidItemTitle').value.trim();
     const cat = document.getElementById('aidItemCategory').value;
     const desc = document.getElementById('aidItemDesc').value.trim();
     const type = document.querySelector('input[name="aidType"]:checked').value;
+    const itemLocation = (document.getElementById('aidItemLocation')?.value || '').trim() || (STATE.currentUser ? STATE.currentUser.location : '') || 'Local';
 
     if (!title || !desc) {
       showToast('Please fill out all listing fields.', 'warning');
@@ -2134,7 +2380,7 @@ function openNewAidModal() {
         category: cat,
         title,
         desc,
-        location: STATE.currentUser.location || 'Local'
+        location: itemLocation
       });
 
       modal.close();
@@ -2213,6 +2459,11 @@ function initRegistrationModal() {
 
   openBtn.addEventListener('click', () => {
     STATE.entropyCollector.startTime = Date.now();
+    const regFeedback = document.getElementById('regLocationFeedback');
+    if (regFeedback) {
+      regFeedback.className = 'location-feedback-pill hidden';
+      regFeedback.textContent = '';
+    }
     modal.showModal();
   });
 
@@ -2279,11 +2530,14 @@ function initRegistrationModal() {
       showToast(`Welcome ${res.user.name}! Your Platform is live. ${res.is_admin ? 'You are the Root Admin 🛡️' : ''}`, 'success');
 
       await refreshUsers();
+      await refreshCommons();
       switchToPlatformTab(res.user.id, false);
     } catch (err) {
       showToast('Registration failed: ' + err.message, 'danger');
     }
   });
+
+  attachLocationGeocodePreview('regLocation', 'regLocationFeedback');
 }
 
 // --- ADMIN COMMAND CENTER (ANTI-BOT & SYBIL DEFENSE) ---
@@ -2818,6 +3072,7 @@ function initEditProfileModal() {
         }
 
         await refreshUsers();
+        await refreshCommons();
         await loadPlatform(res.user.id, false);
       } catch (err) {
         showToast('Profile update failed: ' + err.message, 'danger');
@@ -2827,6 +3082,8 @@ function initEditProfileModal() {
       }
     });
   }
+
+  attachLocationGeocodePreview('editLocation', 'editLocationFeedback');
 }
 
 function openEditProfileModal() {
@@ -2841,6 +3098,18 @@ function openEditProfileModal() {
   document.getElementById('editName').value = u.name || '';
   document.getElementById('editBio').value = u.bio || '';
   document.getElementById('editLocation').value = u.location || '';
+
+  const editFeedback = document.getElementById('editLocationFeedback');
+  if (editFeedback) {
+    if (u.location) {
+      editFeedback.className = 'location-feedback-pill success';
+      editFeedback.innerHTML = `📍 Active: <strong>${escapeHtml(u.formatted_address || u.location)}</strong>`;
+      editFeedback.classList.remove('hidden');
+    } else {
+      editFeedback.className = 'location-feedback-pill hidden';
+      editFeedback.textContent = '';
+    }
+  }
 
   if (document.getElementById('editMotto')) {
     document.getElementById('editMotto').value = u.motto || '';
@@ -6028,8 +6297,9 @@ function initFeatureGuideModal() {
 
   // Display on first arrival if user hasn't seen the guide yet
   const hasSeen = localStorage.getItem('tp_seen_feature_guide_v2');
-  const isDirectPlatformView = window.location.hash.includes('platform') || window.location.search.includes('platform');
-  if (!hasSeen && !isDirectPlatformView) {
+  const isDirectSpecialView = (window.location.search && window.location.search.length > 1) ||
+                              (window.location.hash && window.location.hash.length > 1);
+  if (!hasSeen && !isDirectSpecialView) {
     setTimeout(() => {
       modal?.showModal();
     }, 700);
@@ -6348,6 +6618,7 @@ function initProximityRadar() {
   const openBtn = document.getElementById('openProximityRadarBtn');
   const modal = document.getElementById('proximityRadarModal');
   const closeBtn = document.getElementById('closeProximityRadarBtn');
+  const switchToMapBtn = document.getElementById('radarSwitchToMapBtn');
   const pills = document.querySelectorAll('#radarRangePills .radar-pill');
 
   openBtn?.addEventListener('click', () => {
@@ -6357,6 +6628,13 @@ function initProximityRadar() {
   closeBtn?.addEventListener('click', () => {
     modal?.close();
     stopRadarAnimation();
+  });
+
+  switchToMapBtn?.addEventListener('click', () => {
+    modal?.close();
+    stopRadarAnimation();
+    const mapTabBtn = document.getElementById('commonsViewMapBtn');
+    if (mapTabBtn) mapTabBtn.click();
   });
 
   pills.forEach(pill => {
@@ -6411,14 +6689,26 @@ async function fetchRadarBlips() {
     const res = await apiRequest(`/api/commons/radar?radius_km=${radarRadiusKm}&user_id=${userId}`);
     const rawBlips = res.clusters || [];
 
-    radarBlips = rawBlips.map((b, idx) => {
-      const angle = (idx * 1.45) + (b.distance_km * 0.7);
-      const normDist = Math.max(0.15, Math.min(0.92, b.distance_km / radarRadiusKm));
+    // Update center viewer location display
+    if (res.viewer) {
+      STATE.commonsViewer = res.viewer;
+      const viewerLoc = res.viewer.location || res.viewer.formatted_address || 'Los Banos, CA';
+      const rvl = document.getElementById('radarViewerLocation');
+      if (rvl) rvl.textContent = viewerLoc;
+      const cvlt = document.getElementById('commonsViewerLocationText');
+      if (cvlt) cvlt.textContent = viewerLoc;
+    }
+
+    radarBlips = rawBlips.map((b) => {
+      // True mathematical compass bearing: 0 deg = North (top), 90 deg = East (right), 180 deg = South (bottom), 270 deg = West (left)
+      const bearing = (b.bearing_deg !== undefined && b.bearing_deg !== null) ? b.bearing_deg : 0;
+      const radarRad = ((bearing - 90) * Math.PI) / 180;
+      const normDist = Math.max(0.10, Math.min(0.92, b.distance_km / radarRadiusKm));
       return {
         ...b,
-        relX: Math.cos(angle) * normDist,
-        relY: Math.sin(angle) * normDist,
-        angle: angle % (Math.PI * 2)
+        relX: Math.cos(radarRad) * normDist,
+        relY: Math.sin(radarRad) * normDist,
+        angle: radarRad
       };
     });
 
@@ -6439,15 +6729,21 @@ function renderRadarBlipsList() {
     return;
   }
 
-  list.innerHTML = radarBlips.map(b => `
-    <div class="radar-blip-item ${radarSelectedBlip && radarSelectedBlip.id === b.id ? 'selected' : ''}" onclick="selectRadarBlipById('${b.id}')">
-      <div class="radar-blip-item-info">
-        <span class="radar-blip-dot ${b.type || 'offer'}"></span>
-        <span class="radar-blip-item-name">${escapeHtml(b.title)}</span>
+  list.innerHTML = radarBlips.map(b => {
+    const distMiles = (b.distance_miles !== undefined && b.distance_miles !== null) 
+      ? (b.distance_miles < 0.1 ? '<0.1 mi' : `${b.distance_miles.toFixed(1)} mi`) 
+      : `${b.distance_km.toFixed(1)} km`;
+    const dirStr = b.compass_dir ? ` (${b.compass_dir})` : '';
+    return `
+      <div class="radar-blip-item ${radarSelectedBlip && radarSelectedBlip.id === b.id ? 'selected' : ''}" onclick="selectRadarBlipById('${b.id}')">
+        <div class="radar-blip-item-info">
+          <span class="radar-blip-dot ${b.type || 'offer'}"></span>
+          <span class="radar-blip-item-name">${escapeHtml(b.title)}</span>
+        </div>
+        <span class="radar-blip-item-dist">${distMiles}${dirStr}</span>
       </div>
-      <span class="radar-blip-item-dist">${b.distance_km.toFixed(1)} km</span>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function selectRadarBlip(blip) {
@@ -6461,7 +6757,13 @@ function selectRadarBlip(blip) {
   document.getElementById('radarSelectedTypeBadge').textContent = blip.type === 'request' ? '🆘 COMMUNITY NEED' : '🎁 AID OFFER';
   document.getElementById('radarSelectedTitle').textContent = blip.title;
   document.getElementById('radarSelectedDesc').textContent = blip.description || 'Community resource offered under sovereign reciprocity.';
-  document.getElementById('radarSelectedDist').textContent = `📍 ${blip.distance_km.toFixed(1)} km away (${blip.fuzzy_neighborhood || 'Local Mesh'})`;
+  
+  const distMiles = (blip.distance_miles !== undefined && blip.distance_miles !== null) 
+    ? (blip.distance_miles < 0.1 ? '<0.1 mi' : `${blip.distance_miles.toFixed(1)} mi`) 
+    : `${blip.distance_km.toFixed(1)} km`;
+  const dirStr = blip.compass_dir ? ` (${blip.compass_dir})` : '';
+  const locName = blip.fuzzy_neighborhood || blip.location || 'Local Mesh';
+  document.getElementById('radarSelectedDist').textContent = `📍 ${distMiles} away${dirStr} • ${locName}`;
   document.getElementById('radarSelectedAuthor').textContent = `by ${blip.author_name || 'Member'}`;
 }
 
@@ -6506,18 +6808,33 @@ function drawRadar(ctx, width, height) {
     ctx.arc(cx, cy, maxR * ratio, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.5)';
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.55)';
     ctx.font = '10px monospace';
-    const distVal = ((radarRadiusKm * ratio)).toFixed(0) + ' km';
-    ctx.fillText(distVal, cx + 6, cy - (maxR * ratio) + 12);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    const distKm = (radarRadiusKm * ratio).toFixed(0);
+    const distMi = ((radarRadiusKm * ratio) * 0.621371).toFixed(0);
+    ctx.fillText(`${distKm}km / ${distMi}mi`, cx + 6, cy - (maxR * ratio) + 12);
   });
 
   ctx.beginPath();
   ctx.setLineDash([4, 4]);
-  ctx.moveTo(cx, 16); ctx.lineTo(cx, height - 16);
-  ctx.moveTo(16, cy); ctx.lineTo(width - 16, cy);
+  ctx.moveTo(cx, 18); ctx.lineTo(cx, height - 18);
+  ctx.moveTo(18, cy); ctx.lineTo(width - 18, cy);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // Cardinal direction indicators (North, East, South, West)
+  ctx.fillStyle = 'rgba(52, 211, 153, 0.75)';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('N', cx, 10);
+  ctx.fillText('S', cx, height - 10);
+  ctx.fillText('W', 10, cy);
+  ctx.fillText('E', width - 10, cy);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 
   radarAngle += 0.024;
   if (radarAngle > Math.PI * 2) radarAngle -= Math.PI * 2;

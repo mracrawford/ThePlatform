@@ -4984,11 +4984,42 @@ select option {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  position: relative;
+}
+
+/* Master-Detail Navigation: Friends List vs Chat Window */
+.dm-container.view-friends .dm-sidebar {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-right: none !important;
+}
+
+.dm-container.view-friends .dm-chat-window {
+  display: none !important;
+}
+
+.dm-container.view-friends .dm-sidebar-close-btn {
+  display: inline-flex !important;
+}
+
+.dm-container.view-chat .dm-sidebar {
+  display: none !important;
+}
+
+.dm-container.view-chat .dm-chat-window {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.dm-container.view-chat .dm-back-to-friends-btn {
+  display: inline-flex !important;
 }
 
 /* Sidebar Friends List */
 .dm-sidebar {
-  width: 300px;
+  width: 100%;
   background: rgba(10, 14, 23, 0.95);
   border-right: 1px solid var(--theme-card-border, rgba(255, 255, 255, 0.08));
   display: flex;
@@ -5056,6 +5087,115 @@ select option {
 .dm-friend-item.active {
   background: rgba(168, 85, 247, 0.15);
   border-color: rgba(168, 85, 247, 0.35);
+}
+
+/* Unread messages glowing indicator for friend item */
+@keyframes dmUnreadPulse {
+  0% {
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.7), 0 0 14px rgba(56, 189, 248, 0.5);
+    border-color: rgba(99, 102, 241, 0.85);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.95), 0 0 24px rgba(56, 189, 248, 0.85), 0 0 35px rgba(129, 140, 248, 0.55);
+    border-color: #38bdf8;
+  }
+  100% {
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.7), 0 0 14px rgba(56, 189, 248, 0.5);
+    border-color: rgba(99, 102, 241, 0.85);
+  }
+}
+
+.dm-friend-item.has-unread-glow {
+  background: rgba(99, 102, 241, 0.16) !important;
+  border-color: rgba(99, 102, 241, 0.8) !important;
+  animation: dmUnreadPulse 2.4s infinite ease-in-out !important;
+  position: relative;
+}
+
+.dm-friend-item.has-unread-glow .dm-friend-avatar {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.9), 0 0 5px #818cf8 !important;
+}
+
+.dm-friend-item.has-unread-glow .dm-friend-name {
+  color: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+.dm-friend-item.has-unread-glow .dm-friend-time {
+  color: #38bdf8 !important;
+  font-weight: 700 !important;
+}
+
+.dm-friend-item.has-unread-glow .dm-friend-snippet {
+  color: #e2e8f0 !important;
+  font-weight: 600 !important;
+}
+
+.dm-friend-item.has-unread-glow .dm-unread-badge {
+  background: linear-gradient(135deg, #38bdf8, #818cf8) !important;
+  color: #030712 !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.9) !important;
+  font-weight: 900 !important;
+  font-size: 0.72rem !important;
+  padding: 2px 7px !important;
+}
+
+.dm-unread-glow-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 13px;
+  height: 13px;
+  background: #38bdf8;
+  border: 2px solid #0a0e17;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #38bdf8;
+  animation: dotPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 6px #38bdf8; }
+  50% { transform: scale(1.15); box-shadow: 0 0 12px #38bdf8, 0 0 20px #818cf8; }
+}
+
+.dm-sidebar-close-btn {
+  display: none;
+  color: var(--theme-text-muted);
+  font-size: 0.95rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dm-sidebar-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dm-back-to-friends-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.dm-back-to-friends-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateX(-2px);
 }
 
 .dm-friend-avatar-wrap {
@@ -7444,62 +7584,93 @@ select option {
     border-radius: var(--radius-md) !important;
   }
 
+  /* Mobile & Tablet Master-Detail Direct Messaging */
   .dm-container {
-    flex-direction: column !important;
+    position: relative !important;
+    width: 100% !important;
     height: 100% !important;
+    overflow: hidden !important;
   }
 
-  .dm-sidebar {
+  /* View: Friends List */
+  .dm-container.view-friends .dm-sidebar {
+    display: flex !important;
     width: 100% !important;
-    height: 110px !important;
-    max-height: 110px !important;
+    height: 100% !important;
+    max-height: none !important;
     border-right: none !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     flex-shrink: 0 !important;
   }
 
-  .dm-sidebar-header {
-    padding: 8px 12px 4px !important;
-  }
-
-  .dm-sidebar-title {
-    font-size: 0.85rem !important;
-  }
-
-  .dm-search-box {
-    margin: 4px 12px 6px !important;
-  }
-
-  .dm-friends-list {
-    display: flex !important;
-    flex-direction: row !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    gap: 6px !important;
-    padding: 0 8px 6px !important;
-  }
-
-  .dm-friend-item {
-    flex-direction: column !important;
-    align-items: center !important;
-    text-align: center !important;
-    padding: 4px 6px !important;
-    min-width: 58px !important;
-    border-radius: var(--radius-sm) !important;
-  }
-
-  .dm-friend-avatar {
-    width: 32px !important;
-    height: 32px !important;
-  }
-
-  .dm-friend-info {
+  .dm-container.view-friends .dm-chat-window {
     display: none !important;
   }
 
-  .dm-chat-window {
+  .dm-container.view-friends .dm-sidebar-header {
+    padding: 14px 16px 10px !important;
+  }
+
+  .dm-container.view-friends .dm-sidebar-title {
+    font-size: 1.1rem !important;
+  }
+
+  .dm-container.view-friends .dm-sidebar-close-btn {
+    display: inline-flex !important;
+  }
+
+  .dm-container.view-friends .dm-friends-list {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    gap: 6px !important;
+    padding: 10px !important;
+  }
+
+  .dm-container.view-friends .dm-friend-item {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    text-align: left !important;
+    padding: 12px 14px !important;
+    width: 100% !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .dm-container.view-friends .dm-friend-avatar {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .dm-container.view-friends .dm-friend-meta {
+    display: flex !important;
+    flex-direction: column !important;
     flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .dm-container.view-friends .dm-friend-name {
+    font-size: 0.92rem !important;
+  }
+
+  .dm-container.view-friends .dm-friend-snippet {
+    display: block !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* View: Active Chat */
+  .dm-container.view-chat .dm-sidebar {
+    display: none !important;
+  }
+
+  .dm-container.view-chat .dm-chat-window {
+    display: flex !important;
+    width: 100% !important;
+    height: 100% !important;
     min-height: 0 !important;
+  }
+
+  .dm-container.view-chat .dm-back-to-friends-btn {
+    display: inline-flex !important;
   }
 
   .dm-chat-header {

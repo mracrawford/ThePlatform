@@ -163,6 +163,18 @@ function loadUserSession() {
     STATE.currentUser = null;
   }
 
+  const urlParamUser = new URLSearchParams(window.location.search).get('user_id');
+  if (!STATE.currentUser && urlParamUser) {
+    fetch(`${API_BASE}/api/users/${encodeURIComponent(urlParamUser)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.user) {
+          saveUserSession(d.user);
+          updateUnreadMessagesBadge();
+        }
+      }).catch(() => {});
+  }
+
   // Self-heal stale sessions across DB resets:
   if (STATE.currentUser) {
     if (STATE.currentUser.email === 'mracrawford@gmail.com' || STATE.currentUser.handle === '@adam') {
@@ -4829,6 +4841,15 @@ function initMessagingSystem() {
     });
   }
 
+  document.getElementById('closeDmModalFromSidebarBtn')?.addEventListener('click', () => {
+    modal?.close();
+    stopDmPolling();
+  });
+
+  document.getElementById('dmBackToFriendsBtn')?.addEventListener('click', () => {
+    returnToDmFriendsList();
+  });
+
   if (sendForm) {
     sendForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -5011,8 +5032,12 @@ function startDmPolling() {
   stopDmPolling();
   dmPollInterval = setInterval(() => {
     const modal = document.getElementById('directMessagesModal');
-    if (modal && modal.open && STATE.messaging.activeFriendId) {
-      loadDirectMessages(STATE.messaging.activeFriendId, false);
+    if (modal && modal.open) {
+      if (STATE.messaging.activeFriendId) {
+        loadDirectMessages(STATE.messaging.activeFriendId, false);
+      } else {
+        loadConversationsList(null);
+      }
     }
   }, 4000);
 }
@@ -5074,22 +5099,50 @@ async function openDirectMessagesModal(targetFriendId = null) {
 
   const modal = document.getElementById('directMessagesModal');
   if (!modal) return;
-  modal.showModal();
-  startDmPolling();
-
-  await loadConversationsList(targetFriendId);
+  const container = document.getElementById('dmContainer');
 
   if (targetFriendId) {
+    if (container) {
+      container.classList.remove('view-friends');
+      container.classList.add('view-chat');
+    }
+    modal.showModal();
+    startDmPolling();
+    await loadConversationsList(targetFriendId);
     await selectDmFriend(targetFriendId);
+  } else {
+    // Open directly to friends list view
+    STATE.messaging.activeFriendId = null;
+    if (container) {
+      container.classList.remove('view-chat');
+      container.classList.add('view-friends');
+    }
+    document.querySelectorAll('.dm-friend-item').forEach(el => el.classList.remove('active'));
+    modal.showModal();
+    startDmPolling();
+    await loadConversationsList(null);
   }
 }
 
 function renderDmFriendsList(filterText = '') {
   const container = document.getElementById('dmFriendsList');
   if (!container) return;
-  const convos = STATE.messaging.conversations || [];
+  const convos = [...(STATE.messaging.conversations || [])];
+
+  // Sort: most recent message first, followed by friends with no messages sent at all
+  convos.sort((a, b) => {
+    const timeA = a.latest_time ? new Date(a.latest_time).getTime() : 0;
+    const timeB = b.latest_time ? new Date(b.latest_time).getTime() : 0;
+    if (timeA > 0 && timeB > 0) {
+      return timeB - timeA;
+    }
+    if (timeA > 0 && timeB === 0) return -1;
+    if (timeA === 0 && timeB > 0) return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
   const filtered = filterText ? convos.filter(c => 
-    c.name.toLowerCase().includes(filterText) || c.handle.toLowerCase().includes(filterText)
+    (c.name && c.name.toLowerCase().includes(filterText)) || (c.handle && c.handle.toLowerCase().includes(filterText))
   ) : convos;
 
   if (filtered.length === 0) {
@@ -5097,33 +5150,39 @@ function renderDmFriendsList(filterText = '') {
     return;
   }
 
-  container.innerHTML = filtered.map(c => `
-    <div class="dm-friend-item ${c.id === STATE.messaging.activeFriendId ? 'active' : ''}" 
-         id="dmFriendItem-${c.id}" 
-         onclick="selectDmFriend('${c.id}')">
-      <div class="dm-friend-avatar-wrap">
-        <img src="${c.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(c.name)}" class="dm-friend-avatar">
-        <span class="status-dot-green dm-dot"></span>
-      </div>
-      <div class="dm-friend-meta">
-        <div class="dm-friend-name-row">
-          <span class="dm-friend-name">${escapeHtml(c.name)}</span>
-          <span class="dm-friend-time">${c.latest_time ? formatTimeAgo(c.latest_time) : ''}</span>
+  container.innerHTML = filtered.map(c => {
+    const unread = Number(c.unread_count || 0);
+    const hasUnread = unread > 0;
+    const isActive = c.id === STATE.messaging.activeFriendId;
+
+    return `
+      <div class="dm-friend-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread-glow' : ''}" 
+           id="dmFriendItem-${c.id}" 
+           onclick="selectDmFriend('${c.id}')"
+           role="button"
+           tabindex="0">
+        <div class="dm-friend-avatar-wrap">
+          <img src="${c.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(c.name)}" class="dm-friend-avatar">
+          ${hasUnread ? '<span class="dm-unread-glow-dot" title="New unread message"></span>' : '<span class="status-dot-green dm-dot"></span>'}
         </div>
-        <div class="dm-friend-snippet-row">
-          <span class="dm-friend-snippet">${escapeHtml(c.latest_message || 'Start conversation...')}</span>
-          ${c.unread_count > 0 ? `<span class="dm-unread-badge">${c.unread_count}</span>` : ''}
+        <div class="dm-friend-meta">
+          <div class="dm-friend-name-row">
+            <span class="dm-friend-name">${escapeHtml(c.name)}</span>
+            <span class="dm-friend-time">${c.latest_time ? formatTimeAgo(c.latest_time) : ''}</span>
+          </div>
+          <div class="dm-friend-snippet-row">
+            <span class="dm-friend-snippet">${escapeHtml(c.latest_message || 'Start conversation...')}</span>
+            ${hasUnread ? `<span class="dm-unread-badge">${unread}</span>` : ''}
+          </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 async function loadConversationsList(targetToSelect = null) {
   const container = document.getElementById('dmFriendsList');
   if (!container) return;
-
-  container.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--theme-text-dim); font-size: 0.85rem;">Loading conversations...</div>`;
 
   try {
     const res = await apiRequest('/api/messages/conversations');
@@ -5151,12 +5210,11 @@ async function loadConversationsList(targetToSelect = null) {
       return;
     }
 
-    renderDmFriendsList();
+    const searchVal = document.getElementById('dmFriendsSearchInput')?.value?.toLowerCase()?.trim() || '';
+    renderDmFriendsList(searchVal);
 
     if (targetToSelect) {
       selectDmFriend(targetToSelect);
-    } else if (!STATE.messaging.activeFriendId && convos.length > 0) {
-      selectDmFriend(convos[0].id);
     }
 
     updateUnreadMessagesBadge();
@@ -5168,11 +5226,52 @@ async function loadConversationsList(targetToSelect = null) {
 async function selectDmFriend(friendId) {
   STATE.messaging.activeFriendId = friendId;
 
+  const container = document.getElementById('dmContainer');
+  if (container) {
+    container.classList.remove('view-friends');
+    container.classList.add('view-chat');
+  }
+
   document.querySelectorAll('.dm-friend-item').forEach(el => el.classList.remove('active'));
-  document.getElementById(`dmFriendItem-${friendId}`)?.classList.add('active');
+  const activeItem = document.getElementById(`dmFriendItem-${friendId}`);
+  if (activeItem) {
+    activeItem.classList.add('active');
+    activeItem.classList.remove('has-unread-glow');
+    const badge = activeItem.querySelector('.dm-unread-badge');
+    if (badge) badge.remove();
+    const dot = activeItem.querySelector('.dm-unread-glow-dot');
+    if (dot) {
+      dot.className = 'status-dot-green dm-dot';
+      dot.removeAttribute('title');
+    }
+  }
+
+  // Clear unread count locally for instant responsive UX
+  const convo = (STATE.messaging.conversations || []).find(c => c.id === friendId);
+  if (convo) {
+    convo.unread_count = 0;
+  }
+  updateUnreadMessagesBadge();
 
   await loadDirectMessages(friendId, true);
 }
+
+async function returnToDmFriendsList() {
+  const container = document.getElementById('dmContainer');
+  if (container) {
+    container.classList.remove('view-chat');
+    container.classList.add('view-friends');
+  }
+
+  STATE.messaging.activeFriendId = null;
+  document.querySelectorAll('.dm-friend-item').forEach(el => el.classList.remove('active'));
+
+  // Reload conversations list so that any new messages/unreads are refreshed and sorted
+  await loadConversationsList(null);
+}
+window.returnToDmFriendsList = returnToDmFriendsList;
+window.selectDmFriend = selectDmFriend;
+window.openDirectMessagesModal = openDirectMessagesModal;
 
 async function loadDirectMessages(friendId, shouldScroll = true) {
   if (!friendId) return;

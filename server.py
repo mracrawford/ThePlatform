@@ -1986,13 +1986,13 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 return
 
             uid = cur_user['id']
-            # Find all mutual friends
+            # Find all mutual friends (unique)
             cur.execute("""
-            SELECT CASE WHEN user_id = ? THEN friend_id ELSE user_id END as friend_id
+            SELECT DISTINCT CASE WHEN user_id = ? THEN friend_id ELSE user_id END as friend_id
             FROM friendships
             WHERE (user_id = ? OR friend_id = ?) AND status = 'accepted'
             """, (uid, uid, uid))
-            friend_ids = [row[0] for row in cur.fetchall()]
+            friend_ids = list(dict.fromkeys([row[0] for row in cur.fetchall()]))
 
             conversations = []
             for fid in friend_ids:
@@ -2042,8 +2042,12 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                     "unread_count": unread
                 })
 
-            # Sort conversations: active with latest message first, then alphabetical
-            conversations.sort(key=lambda c: (c['latest_time'] or 0), reverse=True)
+            # Sort conversations: active with latest message first (descending), then those without messages (alphabetical)
+            with_msgs = [c for c in conversations if c.get('latest_time')]
+            without_msgs = [c for c in conversations if not c.get('latest_time')]
+            with_msgs.sort(key=lambda c: c['latest_time'], reverse=True)
+            without_msgs.sort(key=lambda c: (c.get('name') or '').lower())
+            conversations = with_msgs + without_msgs
 
             conn.close()
             self.send_json(200, {"conversations": conversations})

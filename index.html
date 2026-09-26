@@ -2146,13 +2146,16 @@
   <!-- MODAL: PRIVATE MESSAGING SYSTEM FOR FRIENDS -->
   <dialog id="directMessagesModal" class="system-modal" aria-labelledby="directMessagesModalTitle">
     <div class="modal-card modal-xl dm-modal-card">
-      <div class="dm-container">
+      <div class="dm-container view-friends" id="dmContainer">
         <!-- Friends Conversation List Sidebar -->
-        <div class="dm-sidebar">
+        <div class="dm-sidebar" id="dmSidebar">
           <div class="dm-sidebar-header">
             <div class="dm-header-title-row">
-              <span class="dm-icon">💬</span>
-              <h2 id="directMessagesModalTitle" class="dm-sidebar-title">Private Messages</h2>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="dm-icon">💬</span>
+                <h2 id="directMessagesModalTitle" class="dm-sidebar-title">Private Messages</h2>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm dm-sidebar-close-btn" id="closeDmModalFromSidebarBtn" title="Close" aria-label="Close">✕</button>
             </div>
             <p class="dm-sidebar-subtitle">End-to-end authenticated between mutual friends</p>
             <div class="dm-search-wrap">
@@ -2171,6 +2174,9 @@
           <!-- Active Chat Header -->
           <div class="dm-chat-header" id="dmChatHeader">
             <div class="dm-chat-user-info">
+              <button type="button" id="dmBackToFriendsBtn" class="btn btn-ghost btn-sm dm-back-to-friends-btn" title="Back to friends list" aria-label="Back to friends list">
+                <span>← Friends</span>
+              </button>
               <img id="dmActiveFriendAvatar" src="assets/avatar-p-default.svg" alt="Friend Avatar" class="dm-active-avatar">
               <div>
                 <div class="dm-active-name-row">

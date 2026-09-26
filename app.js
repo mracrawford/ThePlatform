@@ -24,6 +24,7 @@ const STATE = {
   dmAttachment: null,
   gifPickerTarget: 'composer',
   notifications: [],
+  notifFilter: 'unread',
   commonsFilter: 'all',
   activeBrandTitle: 'The Platform',
   regPassions: [
@@ -6130,6 +6131,9 @@ function initNotificationsSystem() {
   const dropdown = document.getElementById('notificationsDropdown');
   const markAllBtn = document.getElementById('markAllNotificationsReadBtn');
   const closeBtn = document.getElementById('closeNotificationsBtn');
+  const unreadFilterBtn = document.getElementById('notifFilterUnreadBtn');
+  const allFilterBtn = document.getElementById('notifFilterAllBtn');
+  const clearReadBtn = document.getElementById('notifClearReadBtn');
 
   function positionNotificationsDropdown() {
     if (!btn || !dropdown || dropdown.classList.contains('hidden')) return;
@@ -6148,7 +6152,7 @@ function initNotificationsSystem() {
       dropdown.style.top = 'calc(100% + 10px)';
       dropdown.style.left = '';
       dropdown.style.right = '0';
-      dropdown.style.width = '360px';
+      dropdown.style.width = '370px';
       dropdown.style.maxWidth = 'calc(100vw - 24px)';
 
       // Prevent left-edge overflow on smaller desktop screens
@@ -6177,13 +6181,49 @@ function initNotificationsSystem() {
     dropdown?.classList.add('hidden');
   });
 
-  markAllBtn?.addEventListener('click', async () => {
+  unreadFilterBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    STATE.notifFilter = 'unread';
+    unreadFilterBtn.classList.add('active');
+    allFilterBtn?.classList.remove('active');
+    renderNotificationsList();
+  });
+
+  allFilterBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    STATE.notifFilter = 'all';
+    allFilterBtn.classList.add('active');
+    unreadFilterBtn?.classList.remove('active');
+    renderNotificationsList();
+  });
+
+  clearReadBtn?.addEventListener('click', async (e) => {
+    e.stopPropagation();
     try {
-      await apiRequest('/api/notifications/read', 'POST', { all: true });
-      fetchNotifications();
+      await apiRequest('/api/notifications/clear', 'POST', { all_read: true });
+      STATE.notifications = STATE.notifications.filter(n => !n.is_read);
+      const unreadCount = STATE.notifications.filter(n => !n.is_read).length;
+      updateNotificationsBadge(unreadCount);
+      renderNotificationsList();
+      showToast('Read notifications cleared.', 'info');
+    } catch (err) {
+      console.warn('Failed to clear read notifications:', err);
+    }
+  });
+
+  markAllBtn?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await apiRequest('/api/notifications/read', 'POST', { all: true, mark_all: true });
+      STATE.notifications.forEach(n => {
+        n.is_read = true;
+        n.read = 1;
+      });
+      updateNotificationsBadge(0);
+      renderNotificationsList();
       showToast('All notifications marked as read.', 'info');
     } catch (err) {
-      console.warn(err);
+      console.warn('Failed to mark all as read:', err);
     }
   });
 
@@ -6210,71 +6250,307 @@ function initNotificationsSystem() {
   setInterval(fetchNotifications, 15000);
 }
 
+function updateNotificationsBadge(unreadCount) {
+  const badge = document.getElementById('navNotificationsBadge');
+  const filterBadge = document.getElementById('notifFilterBadge');
+
+  if (badge) {
+    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+    badge.classList.toggle('hidden', unreadCount === 0);
+  }
+  if (filterBadge) {
+    filterBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+    filterBadge.classList.toggle('hidden', unreadCount === 0);
+  }
+}
+
+function getNotifTypeIcon(type) {
+  switch (type) {
+    case 'post_reply': return '💬';
+    case 'platform_comment': return '💬';
+    case 'comment_mention': return '@';
+    case 'user_mention': return '@';
+    case 'post_mention': return '🔗';
+    case 'guestbook_note': return '📝';
+    case 'platform_post': return '🪐';
+    case 'message': return '🔒';
+    case 'friend_request': return '🤝';
+    case 'friend_accept': return '✨';
+    case 'admin_flag_alert': return '🛡️';
+    default: return '🔔';
+  }
+}
+
+function renderNotificationsList() {
+  const list = document.getElementById('notificationsList');
+  if (!list) return;
+
+  const displayList = STATE.notifFilter === 'unread'
+    ? STATE.notifications.filter(n => !n.is_read)
+    : STATE.notifications;
+
+  if (displayList.length === 0) {
+    const emptyMsg = STATE.notifFilter === 'unread'
+      ? '✨ All caught up! No unread notifications.'
+      : 'No notifications yet.';
+    list.innerHTML = `<div class="notifications-empty">${emptyMsg}</div>`;
+    return;
+  }
+
+  list.innerHTML = displayList.map(n => {
+    const icon = getNotifTypeIcon(n.type);
+    const title = n.title || 'Notification';
+    return `
+      <div class="notification-item ${n.is_read ? '' : 'unread'}" onclick="handleNotificationClick('${n.id}')">
+        <img src="${n.sender_avatar || 'assets/avatar-p-default.svg'}" class="notification-avatar" alt="Avatar">
+        <div class="notification-body">
+          <div class="notif-title-row">
+            <span class="notif-type-icon">${icon}</span>
+            <span class="notif-title-text">${escapeHtml(title)}</span>
+          </div>
+          <div class="notification-text">${escapeHtml(n.text || '')}</div>
+          <div class="notification-time">${formatTimeAgo(n.created_at)}</div>
+        </div>
+        <button type="button" class="notif-dismiss-btn" title="Dismiss" onclick="event.stopPropagation(); dismissNotification('${n.id}')" aria-label="Dismiss">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
 async function fetchNotifications() {
   if (!STATE.currentUser) {
-    const badge = document.getElementById('navNotificationsBadge');
-    if (badge) badge.classList.add('hidden');
+    updateNotificationsBadge(0);
     return;
   }
 
   try {
     const res = await apiRequest('/api/notifications');
-    STATE.notifications = res.notifications || [];
-    const unreadCount = res.unread_count || 0;
+    STATE.notifications = (res.notifications || []).map(n => ({
+      ...n,
+      is_read: Boolean(n.is_read || n.read === 1)
+    }));
 
-    const badge = document.getElementById('navNotificationsBadge');
-    if (badge) {
-      badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-      badge.classList.toggle('hidden', unreadCount === 0);
-    }
+    const unreadCount = typeof res.unread_count === 'number'
+      ? res.unread_count
+      : STATE.notifications.filter(n => !n.is_read).length;
 
-    const list = document.getElementById('notificationsList');
-    if (!list) return;
-
-    if (STATE.notifications.length === 0) {
-      list.innerHTML = `<div class="notifications-empty">No notifications yet.</div>`;
-      return;
-    }
-
-    list.innerHTML = STATE.notifications.map(n => `
-      <div class="notification-item ${n.is_read ? '' : 'unread'}" onclick="handleNotificationClick('${n.id}', '${n.target_id || ''}')">
-        <img src="${n.sender_avatar || 'assets/avatar-p-default.svg'}" class="notification-avatar" alt="Avatar">
-        <div class="notification-body">
-          <div class="notification-text">${escapeHtml(n.text)}</div>
-          <div class="notification-time">${formatTimeAgo(n.created_at)}</div>
-        </div>
-      </div>
-    `).join('');
+    updateNotificationsBadge(unreadCount);
+    renderNotificationsList();
   } catch (err) {
     // Non-blocking
   }
 }
 
-window.handleNotificationClick = async function(nid, targetId) {
+window.dismissNotification = async function(nid) {
+  const notif = STATE.notifications.find(n => n.id === nid);
+  if (notif) {
+    notif.is_read = true;
+    notif.read = 1;
+  }
+  const unreadCount = STATE.notifications.filter(n => !n.is_read).length;
+  updateNotificationsBadge(unreadCount);
+  renderNotificationsList();
+
   try {
-    await apiRequest('/api/notifications/read', 'POST', { notification_id: nid });
-  } catch (e) {}
-
-  document.getElementById('notificationsDropdown')?.classList.add('hidden');
-  fetchNotifications();
-
-  if (targetId) {
-    if (targetId.startsWith('usr-') || targetId === 'maya' || targetId === 'julian' || targetId === 'elena' || targetId === 'jordan') {
-      switchToPlatformTab(targetId, true);
-    } else {
-      document.getElementById('navTabTopics')?.click();
-      setTimeout(() => {
-        const el = document.getElementById(`topic-post-${targetId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-          if (!STATE.topicsExpandedPosts.has(targetId)) {
-            toggleExpandTopicCard(targetId);
-          }
-        }
-      }, 500);
-    }
+    await apiRequest('/api/notifications/clear', 'POST', { id: nid, notification_id: nid });
+    STATE.notifications = STATE.notifications.filter(n => n.id !== nid);
+    renderNotificationsList();
+  } catch (err) {
+    console.warn('Failed to dismiss notification:', err);
   }
 };
+
+window.handleNotificationClick = async function(nid) {
+  const notif = STATE.notifications.find(n => n.id === nid);
+  if (!notif) return;
+
+  // 1. Immediately mark as read in local state
+  notif.is_read = true;
+  notif.read = 1;
+  const unreadCount = STATE.notifications.filter(n => !n.is_read).length;
+  updateNotificationsBadge(unreadCount);
+
+  // In unread tab, remove from view immediately
+  renderNotificationsList();
+
+  // 2. Mark as read on backend
+  try {
+    await apiRequest('/api/notifications/read', 'POST', { notification_id: nid, id: nid });
+  } catch (e) {
+    console.warn('Could not mark notification read:', e);
+  }
+
+  // 3. Close the dropdown
+  document.getElementById('notificationsDropdown')?.classList.add('hidden');
+
+  // 4. Navigate directly to what was notified of
+  await routeNotificationTarget(notif);
+};
+
+async function routeNotificationTarget(notif) {
+  if (!notif) return;
+
+  // Case 1: Direct Messages
+  if (notif.type === 'message') {
+    const peerId = notif.target_id || notif.sender_id;
+    if (typeof openDirectMessagesModal === 'function') {
+      openDirectMessagesModal(peerId);
+    }
+    return;
+  }
+
+  // Case 2: Friend Requests
+  if (notif.type === 'friend_request') {
+    if (typeof openFriendsModal === 'function') {
+      openFriendsModal();
+    }
+    return;
+  }
+
+  // Case 3: Connection Accepted
+  if (notif.type === 'friend_accept') {
+    if (notif.sender_id) {
+      switchToPlatformTab(notif.sender_id, true);
+    } else if (typeof openFriendsModal === 'function') {
+      openFriendsModal();
+    }
+    return;
+  }
+
+  // Case 4: Platform Post or Guestbook Note on a platform
+  if (notif.type === 'platform_post' || notif.type === 'guestbook_note') {
+    const targetHost = notif.post_host_id || STATE.currentUser?.id || 'usr-adam';
+    const isGuestbook = Boolean(notif.post_is_guestbook || notif.type === 'guestbook_note');
+    await navigateToPlatformPost(targetHost, notif.target_id, isGuestbook);
+    return;
+  }
+
+  // Case 5: Post Reply, Comment, or Mention
+  if (['post_reply', 'platform_comment', 'comment_mention', 'user_mention', 'post_mention', 'admin_flag_alert'].includes(notif.type)) {
+    // If post has an interest tag or no specific host, it is in Topics & Trending
+    if (notif.post_interest) {
+      await navigateToTopicPost(notif.target_id);
+    } else if (notif.post_host_id && notif.post_host_id !== 'trending') {
+      await navigateToPlatformPost(notif.post_host_id, notif.target_id, Boolean(notif.post_is_guestbook));
+    } else {
+      await navigateToTopicPost(notif.target_id);
+    }
+    return;
+  }
+
+  // Fallback: If targetId is a user, switch to platform. Otherwise, try topic post.
+  const targetId = notif.target_id;
+  if (targetId) {
+    if (targetId.startsWith('usr-') || ['maya', 'julian', 'elena', 'jordan'].includes(targetId)) {
+      switchToPlatformTab(targetId, true);
+    } else {
+      await navigateToTopicPost(targetId);
+    }
+  }
+}
+
+async function navigateToPlatformPost(hostId, postId, isGuestbook = false) {
+  const targetHost = hostId || STATE.currentUser?.id || 'usr-adam';
+
+  // 1. Switch to Platforms view
+  const tabs = document.querySelectorAll('.nav-tab-btn');
+  const sections = document.querySelectorAll('.view-section');
+  tabs.forEach(t => t.classList.remove('active'));
+  document.getElementById('navTabPlatforms')?.classList.add('active');
+  sections.forEach(sec => sec.classList.remove('active'));
+  document.getElementById('platformSection')?.classList.add('active');
+
+  // 2. Select appropriate feed tab (Guestbook vs Dispatches)
+  if (isGuestbook) {
+    STATE.activeFeedTab = 'guestbook';
+    document.getElementById('feedTabGuestbook')?.classList.add('active');
+    document.getElementById('feedTabDispatches')?.classList.remove('active');
+  } else {
+    STATE.activeFeedTab = 'dispatches';
+    document.getElementById('feedTabDispatches')?.classList.add('active');
+    document.getElementById('feedTabGuestbook')?.classList.remove('active');
+  }
+
+  // 3. Load host platform
+  await loadPlatform(targetHost, false);
+
+  // 4. Scroll smoothly to target post and apply glowing notification highlight
+  setTimeout(() => {
+    const postEl = document.getElementById(`post-${postId}`);
+    if (postEl) {
+      postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      postEl.classList.remove('notification-highlight');
+      void postEl.offsetWidth; // Restart CSS keyframe animation
+      postEl.classList.add('notification-highlight');
+      setTimeout(() => postEl.classList.remove('notification-highlight'), 4500);
+    } else {
+      document.getElementById('postsStream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 250);
+}
+
+async function navigateToTopicPost(postId) {
+  // 1. Switch to Topics & Trending tab
+  const tabBtn = document.getElementById('navTabTopics');
+  tabBtn?.click();
+
+  // Reset filters if active so target post isn't hidden
+  if (STATE.topicsFilter !== 'all') {
+    STATE.topicsFilter = 'all';
+    document.querySelectorAll('.topic-interest-pill').forEach(p => p.classList.remove('active'));
+    document.querySelector('.topic-interest-pill[data-interest="all"]')?.classList.add('active');
+  }
+  if (STATE.topicsSavedOnly) {
+    STATE.topicsSavedOnly = false;
+  }
+  if (STATE.topicsSubtopic) {
+    STATE.topicsSubtopic = '';
+  }
+
+  // 2. Refresh topics feed
+  await fetchAndRenderTopics();
+
+  // 3. Check if card exists in DOM; if not, dynamically fetch and prepend it
+  let card = document.getElementById(`topic-post-${postId}`);
+  if (!card) {
+    try {
+      const res = await apiRequest(`/api/posts/${postId}`);
+      if (res && res.post) {
+        const feedList = document.getElementById('topicsFeedList');
+        if (feedList) {
+          const cardHtml = renderTopicCardHtml(res.post);
+          feedList.insertAdjacentHTML('afterbegin', cardHtml);
+          attachTopicCardEventListeners();
+          card = document.getElementById(`topic-post-${postId}`);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load specific topic post:', err);
+    }
+  }
+
+  // 4. Scroll into view and highlight
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('notification-highlight');
+    void card.offsetWidth;
+    card.classList.add('notification-highlight');
+    setTimeout(() => card.classList.remove('notification-highlight'), 4500);
+
+    // Expand discussion card to display comments
+    if (!STATE.topicsExpandedPosts.has(postId)) {
+      await toggleExpandTopicCard(postId);
+    }
+
+    // Scroll to the comments box
+    setTimeout(() => {
+      const commentsBox = document.getElementById(`topic-comments-box-${postId}`);
+      if (commentsBox) {
+        commentsBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 450);
+  }
+}
 
 /* ==========================================================================
    FEATURE GUIDE MODAL (WHAT'S NEW — ZERO PROFILE REVERSION)

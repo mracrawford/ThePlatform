@@ -1799,6 +1799,34 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"comments": comments})
             return
 
+        # 8b. GET /api/posts/:id - Fetch single post
+        post_match = re.match(r'^/api/posts/([^/]+)$', path)
+        if post_match:
+            pid = post_match.group(1)
+            if pid not in ['saved', 'user-activity']:
+                current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
+                u = resolve_user(cur, current_id)
+                uid = u['id'] if u else None
+                cur.execute("""
+                SELECT p.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto,
+                       (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) as comments_count,
+                       (SELECT COUNT(*) FROM saved_posts WHERE post_id = p.id AND user_id = ?) as is_saved
+                FROM posts p
+                JOIN users u ON p.author_id = u.id
+                WHERE p.id = ?
+                """, (uid, pid))
+                row = cur.fetchone()
+                if row:
+                    pdict = dict(row)
+                    pdict['is_saved'] = 1 if pdict.get('is_saved') else 0
+                    conn.close()
+                    self.send_json(200, {"post": pdict})
+                    return
+                else:
+                    conn.close()
+                    self.send_json(404, {"error": "Post not found"})
+                    return
+
         # 9. GET /api/posts/saved - Current user's bookmarked posts
         if path == '/api/posts/saved':
             current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
@@ -2045,14 +2073,25 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 self.send_json(401, {"error": "Authentication required."})
                 return
             uid = u['id']
-            cur.execute("""
-            SELECT n.*, s.name as sender_name, s.handle as sender_handle, s.avatar as sender_avatar
+            filter_mode = (query.get('filter') and query.get('filter')[0]) or 'all'
+            filter_clause = " AND n.read = 0 " if filter_mode == 'unread' else ""
+
+            cur.execute(f"""
+            SELECT n.*, s.name as sender_name, s.handle as sender_handle, s.avatar as sender_avatar,
+                   p.host_id as post_host_id, p.interest as post_interest, p.is_guestbook as post_is_guestbook,
+                   p.text as post_text
             FROM notifications n
             JOIN users s ON n.sender_id = s.id
-            WHERE n.user_id = ?
+            LEFT JOIN posts p ON n.target_id = p.id
+            WHERE n.user_id = ? {filter_clause}
             ORDER BY n.created_at DESC LIMIT 50
             """, (uid,))
-            notifications = [dict(row) for row in cur.fetchall()]
+            notifications = []
+            for row in cur.fetchall():
+                d = dict(row)
+                d['is_read'] = bool(d.get('read', 0))
+                d['read'] = int(d.get('read', 0))
+                notifications.append(d)
             cur.execute("SELECT COUNT(*) as unread FROM notifications WHERE user_id = ? AND read = 0", (uid,))
             unread_count = cur.fetchone()['unread']
             conn.close()
@@ -2981,13 +3020,17 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 VALUES (?, ?, ?, 'user_mention', 'Mentioned in a Post', ?, ?, 0, ?)
                 """, (nid, target_uid, author_id, f"{author['name']} mentioned you in a post: \"{text[:60]}\"", post_id, now))
 
-            # If guestbook post on someone else's platform, notify the host
-            if is_guestbook and host_id != author_id:
+            # If post on someone else's platform, notify the host
+            if host_id != author_id:
                 nid = 'notif-' + uuid.uuid4().hex[:10]
+                notif_type = 'guestbook_note' if is_guestbook else 'platform_post'
+                notif_title = 'New Guestbook Entry' if is_guestbook else 'New Platform Post'
+                snippet = (text[:60] + '...') if len(text) > 60 else text
+                notif_text = f"{author['name']} left a note on your platform: \"{snippet}\"" if is_guestbook else f"{author['name']} posted to your platform: \"{snippet}\""
                 cur.execute("""
                 INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
-                VALUES (?, ?, ?, 'guestbook_note', 'New Guestbook Entry', ?, ?, 0, ?)
-                """, (nid, host_id, author_id, f"{author['name']} left a note on your platform.", post_id, now))
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+                """, (nid, host_id, author_id, notif_type, notif_title, notif_text, post_id, now))
 
             # --- SUB-TOPIC SCRAPING ---
             user_subtopics = []
@@ -3223,6 +3266,12 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             now = int(time.time())
             if reciprocal:
                 cur.execute("UPDATE friendships SET status = 'accepted', updated_at = ? WHERE id = ?", (now, reciprocal['id']))
+                # Notify target of accepted reciprocal connection
+                nid = 'notif-' + uuid.uuid4().hex[:10]
+                cur.execute("""
+                INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
+                VALUES (?, ?, ?, 'friend_accept', 'Connection Accepted', ?, ?, 0, ?)
+                """, (nid, target['id'], caller['id'], f"You and {caller['name']} are now connected as friends! 🤝", caller['id'], now))
                 conn.commit()
                 conn.close()
                 self.send_json(200, {"message": f"You and {target['name']} are now friends! 🤝", "status": "accepted"})
@@ -3243,6 +3292,11 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 else:
                     cur.execute("UPDATE friendships SET user_id = ?, friend_id = ?, status = 'pending', updated_at = ? WHERE id = ?",
                                 (caller['id'], target['id'], now, existing['id']))
+                    nid = 'notif-' + uuid.uuid4().hex[:10]
+                    cur.execute("""
+                    INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
+                    VALUES (?, ?, ?, 'friend_request', 'New Connection Request', ?, ?, 0, ?)
+                    """, (nid, target['id'], caller['id'], f"{caller['name']} sent you a friend request 🤝", caller['id'], now))
                     conn.commit()
                     conn.close()
                     self.send_json(200, {"message": f"Friend request sent to {target['name']}! 🤝", "status": "pending"})
@@ -3251,6 +3305,11 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             req_id = 'fr-' + uuid.uuid4().hex[:8]
             cur.execute("INSERT INTO friendships (id, user_id, friend_id, status, created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?)",
                         (req_id, caller['id'], target['id'], now, now))
+            nid = 'notif-' + uuid.uuid4().hex[:10]
+            cur.execute("""
+            INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
+            VALUES (?, ?, ?, 'friend_request', 'New Connection Request', ?, ?, 0, ?)
+            """, (nid, target['id'], caller['id'], f"{caller['name']} sent you a friend request 🤝", caller['id'], now))
             conn.commit()
             conn.close()
             self.send_json(201, {"message": f"Friend request sent to {target['name']}! 🤝", "status": "pending", "request_id": req_id})
@@ -3285,6 +3344,12 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
             new_status = 'accepted' if action == 'accept' else 'declined'
             cur.execute("UPDATE friendships SET status = ?, updated_at = ? WHERE id = ?", (new_status, now, req_row['id']))
+            if action == 'accept':
+                nid = 'notif-' + uuid.uuid4().hex[:10]
+                cur.execute("""
+                INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
+                VALUES (?, ?, ?, 'friend_accept', 'Connection Accepted', ?, ?, 0, ?)
+                """, (nid, req_row['user_id'], caller['id'], f"{caller['name']} accepted your friend request! 🤝", caller['id'], now))
             conn.commit()
             conn.close()
             self.send_json(200, {
@@ -3373,6 +3438,40 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             now = int(time.time())
             cur.execute("INSERT INTO post_comments (id, post_id, author_id, text, created_at) VALUES (?, ?, ?, ?, ?)",
                         (cid, post_id, author['id'], text, now))
+
+            # Fetch post details for notifications
+            cur.execute("SELECT id, author_id, host_id, interest, is_guestbook, text FROM posts WHERE id = ?", (post_id,))
+            target_post = cur.fetchone()
+            if target_post:
+                snippet = (text[:60] + '...') if len(text) > 60 else text
+                # 1. Notify post author (if not replying to self)
+                if target_post['author_id'] != author['id']:
+                    nid = 'notif-' + uuid.uuid4().hex[:10]
+                    cur.execute("""
+                    INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
+                    VALUES (?, ?, ?, 'post_reply', 'New Reply to Your Post', ?, ?, 0, ?)
+                    """, (nid, target_post['author_id'], author['id'], f"{author['name']} replied to your post: \"{snippet}\"", post_id, now))
+
+                # 2. If post is hosted on another member's platform, notify the platform host
+                if target_post['host_id'] and target_post['host_id'] != author['id'] and target_post['host_id'] != target_post['author_id']:
+                    nid = 'notif-' + uuid.uuid4().hex[:10]
+                    cur.execute("""
+                    INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
+                    VALUES (?, ?, ?, 'platform_comment', 'New Comment on Your Platform', ?, ?, 0, ?)
+                    """, (nid, target_post['host_id'], author['id'], f"{author['name']} commented on a post on your platform: \"{snippet}\"", post_id, now))
+
+                # 3. Check for @mentions in comment text
+                comment_mentions = set(re.findall(r'@([a-zA-Z0-9_\-\.]+)', text))
+                for h in comment_mentions:
+                    cur.execute("SELECT id FROM users WHERE LOWER(handle) = ? OR LOWER(handle) = ?", (h.lower(), f"@{h.lower()}"))
+                    m_user = cur.fetchone()
+                    if m_user and m_user['id'] != author['id'] and m_user['id'] != target_post['author_id'] and m_user['id'] != target_post['host_id']:
+                        nid = 'notif-' + uuid.uuid4().hex[:10]
+                        cur.execute("""
+                        INSERT INTO notifications (id, user_id, sender_id, type, title, text, target_id, read, created_at)
+                        VALUES (?, ?, ?, 'comment_mention', 'Mentioned in a Comment', ?, ?, 0, ?)
+                        """, (nid, m_user['id'], author['id'], f"{author['name']} mentioned you in a comment: \"{snippet}\"", post_id, now))
+
             conn.commit()
             cur.execute("""
             SELECT pc.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto
@@ -3504,15 +3603,37 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 conn.close()
                 self.send_json(401, {"error": "Authentication required."})
                 return
-            nid = data.get('notification_id')
-            mark_all = data.get('mark_all', False)
+            nid = data.get('notification_id') or data.get('id')
+            mark_all = bool(data.get('mark_all', False) or data.get('all', False))
             if mark_all:
                 cur.execute("UPDATE notifications SET read = 1 WHERE user_id = ?", (caller['id'],))
             elif nid:
                 cur.execute("UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?", (nid, caller['id']))
             conn.commit()
+            cur.execute("SELECT COUNT(*) as unread FROM notifications WHERE user_id = ? AND read = 0", (caller['id'],))
+            unread_count = cur.fetchone()['unread']
             conn.close()
-            self.send_json(200, {"success": True})
+            self.send_json(200, {"success": True, "unread_count": unread_count})
+            return
+
+        # 15b. POST /api/notifications/clear or /api/notifications/dismiss - Dismiss or clear read notifications
+        if path in ['/api/notifications/clear', '/api/notifications/dismiss']:
+            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            if not caller:
+                conn.close()
+                self.send_json(401, {"error": "Authentication required."})
+                return
+            nid = data.get('notification_id') or data.get('id')
+            clear_all_read = bool(data.get('all_read', False) or data.get('all', False) or not nid)
+            if nid:
+                cur.execute("DELETE FROM notifications WHERE id = ? AND user_id = ?", (nid, caller['id']))
+            elif clear_all_read:
+                cur.execute("DELETE FROM notifications WHERE user_id = ? AND read = 1", (caller['id'],))
+            conn.commit()
+            cur.execute("SELECT COUNT(*) as unread FROM notifications WHERE user_id = ? AND read = 0", (caller['id'],))
+            unread_count = cur.fetchone()['unread']
+            conn.close()
+            self.send_json(200, {"success": True, "unread_count": unread_count})
             return
 
         # 16. POST /api/posts/edit - Edit post content, topic, or visibility (Author or Admin)

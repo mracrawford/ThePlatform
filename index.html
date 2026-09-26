@@ -164,11 +164,18 @@
         </button>
         <div id="notificationsDropdown" class="notifications-dropdown hidden glass-panel">
           <div class="notifications-header">
-            <h4>Notifications &amp; Mentions</h4>
+            <h4>Notifications</h4>
             <div class="notifications-header-actions">
               <button type="button" id="markAllNotificationsReadBtn" class="btn-text-subtle">Mark all read</button>
               <button type="button" id="closeNotificationsBtn" class="notifications-close-btn" title="Close notifications" aria-label="Close">✕</button>
             </div>
+          </div>
+          <div class="notif-filter-bar">
+            <div class="notif-filter-pills">
+              <button type="button" id="notifFilterUnreadBtn" class="notif-filter-btn active">Unread <span id="notifFilterBadge" class="notif-tab-badge hidden">0</span></button>
+              <button type="button" id="notifFilterAllBtn" class="notif-filter-btn">All</button>
+            </div>
+            <button type="button" id="notifClearReadBtn" class="notif-clear-read-btn" title="Clear read notifications">Clear read</button>
           </div>
           <div id="notificationsList" class="notifications-list">
             <div class="notifications-empty">No notifications yet.</div>

@@ -338,18 +338,6 @@ def init_db():
     if 'formatted_address' not in existing_cols:
         cursor.execute("ALTER TABLE users ADD COLUMN formatted_address TEXT DEFAULT NULL")
 
-    # Ensure Adam account has full admin and commons verification, and true Los Banos location coordinates
-    cursor.execute("""
-    UPDATE users SET 
-        is_admin = 1, 
-        commons_verified = 1,
-        location = CASE WHEN location = '' OR location IS NULL THEN 'Los Banos, CA' ELSE location END,
-        latitude = COALESCE(latitude, 37.0592),
-        longitude = COALESCE(longitude, -120.8505),
-        formatted_address = COALESCE(formatted_address, 'Los Banos, Merced County, California, United States')
-    WHERE id = 'usr-adam' OR LOWER(handle) = '@adam' OR LOWER(email) = 'mracrawford@gmail.com'
-    """)
-
     # Banned IPs Table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS banned_ips (
@@ -640,9 +628,9 @@ def init_db():
 def seed_example_data(cursor, conn):
     now = int(time.time())
 
-    # Maya Lin (AI / Example Account)
+    # Maya Lin (AI / Example Account - only insert if not already present; NEVER modify existing accounts)
     cursor.execute('''
-    INSERT OR REPLACE INTO users (
+    INSERT OR IGNORE INTO users (
         id, handle, name, email, phone, bio, avatar, banner,
         music_title, music_source, privacy, is_admin, is_example,
         registered_ip, bot_score, bot_flags, entropy_score, karma,
@@ -667,7 +655,7 @@ def seed_example_data(cursor, conn):
 
     # Julian Vance (AI / Example Account)
     cursor.execute('''
-    INSERT OR REPLACE INTO users (
+    INSERT OR IGNORE INTO users (
         id, handle, name, email, phone, bio, avatar, banner,
         music_title, music_source, privacy, is_admin, is_example,
         registered_ip, bot_score, bot_flags, entropy_score, karma,
@@ -692,7 +680,7 @@ def seed_example_data(cursor, conn):
 
     # Elena Rostova (AI / Example Account)
     cursor.execute('''
-    INSERT OR REPLACE INTO users (
+    INSERT OR IGNORE INTO users (
         id, handle, name, email, phone, bio, avatar, banner,
         music_title, music_source, privacy, is_admin, is_example,
         registered_ip, bot_score, bot_flags, entropy_score, karma,
@@ -715,13 +703,12 @@ def seed_example_data(cursor, conn):
         "https://www.youtube.com/watch?v=d9j-rEWa96Y"
     ))
 
-    # Seed / Update Root Super Admin Account (Adam) with securely hashed password and Solidarity Forever motto
-    adam_salt = uuid.uuid4().hex
-    adam_hash = hashlib.pbkdf2_hmac('sha256', b'Jocelyn&Me2026', adam_salt.encode('utf-8'), 100000).hex()
-    
+    # Seed Root Super Admin Account (Adam) if not existing; NEVER overwrite existing user accounts!
     cursor.execute("SELECT id FROM users WHERE id = 'usr-adam' OR email = 'mracrawford@gmail.com'")
     existing_adam = cursor.fetchone()
     if not existing_adam:
+        adam_salt = uuid.uuid4().hex
+        adam_hash = hashlib.pbkdf2_hmac('sha256', b'Jocelyn&Me2026', adam_salt.encode('utf-8'), 100000).hex()
         cursor.execute('''
         INSERT INTO users (
             id, handle, name, email, phone, bio, avatar, banner,
@@ -749,44 +736,36 @@ def seed_example_data(cursor, conn):
             json.dumps(["assets/avatar-p-default.svg"]),
             "https://www.youtube.com/watch?v=VZBrZV3nHAA"
         ))
-    else:
-        # Existing account: keep custom banner, avatar, passions, dob, motto completely intact!
-        cursor.execute('''
-        UPDATE users SET
-            is_admin = 1,
-            commons_verified = 1
-        WHERE id = 'usr-adam' OR email = 'mracrawford@gmail.com'
-        ''')
 
-    # Seed Posts with Interest, Subtopic, Views, and Likes
+    # Seed Posts with Interest, Subtopic, Views, and Likes (only if not already present)
     cursor.execute('''
-    INSERT OR REPLACE INTO posts (id, host_id, author_id, text, interest, subtopic, media_url, media_type, is_guestbook, likes, views, created_at)
+    INSERT OR IGNORE INTO posts (id, host_id, author_id, text, interest, subtopic, media_url, media_type, is_guestbook, likes, views, created_at)
     VALUES ('post-m1', 'maya', 'maya', 'Just restored a 1974 mechanical SLR camera. In an era where AI can synthesize any image in milliseconds, there is immense grounding in waiting for light to hit silver halide crystals.', 'Photography', '35mm Film Restoration', 'assets/vintage-camera.jpg', 'image', 0, 28, 142, ?)
     ''', (now - 3600 * 3,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO posts (id, host_id, author_id, text, interest, subtopic, media_url, media_type, video_duration, is_guestbook, likes, views, created_at)
+    INSERT OR IGNORE INTO posts (id, host_id, author_id, text, interest, subtopic, media_url, media_type, video_duration, is_guestbook, likes, views, created_at)
     VALUES ('post-m2', 'maya', 'maya', '45-second live patch on the modular synth. Tuning frequency modulation on the low pass filter. Enjoy the ambient frequencies! 🎧', 'Music', 'Modular Synthesizers', NULL, 'video', '0:45', 0, 42, 310, ?)
     ''', (now - 3600 * 8,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO posts (id, host_id, author_id, text, interest, subtopic, is_guestbook, likes, views, created_at)
+    INSERT OR IGNORE INTO posts (id, host_id, author_id, text, interest, subtopic, is_guestbook, likes, views, created_at)
     VALUES ('post-mg1', 'maya', 'julian', 'Maya, that patch sounds incredible through tube monitors. Reminds me of late 90s ambient Detroit techno.', 'Music', 'Ambient Detroit Techno', 1, 9, 45, ?)
     ''', (now - 3600 * 5,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO posts (id, host_id, author_id, text, interest, subtopic, is_guestbook, likes, views, created_at)
+    INSERT OR IGNORE INTO posts (id, host_id, author_id, text, interest, subtopic, is_guestbook, likes, views, created_at)
     VALUES ('post-j1', 'julian', 'julian', 'Finished hand-carving a quarter-sawn Sitka spruce soundboard for a parlor acoustic guitar. Traditional hot hide glue joinery. Analog vibration is pure medicine.', 'Woodworking', 'Acoustic Lutherie', 0, 34, 188, ?)
     ''', (now - 3600 * 14,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO posts (id, host_id, author_id, text, interest, subtopic, media_url, media_type, is_guestbook, likes, views, created_at)
+    INSERT OR IGNORE INTO posts (id, host_id, author_id, text, interest, subtopic, media_url, media_type, is_guestbook, likes, views, created_at)
     VALUES ('post-e1', 'elena', 'elena', '36-hour cold fermented heritage sourdough baked with heirloom Red Fife wheat from the Skagit Valley. Wild yeasts alive and active!', 'Baking', 'Heritage Sourdough', 'assets/sourdough.jpg', 'image', 0, 58, 412, ?)
     ''', (now - 3600 * 20,))
 
-    # Seed Sample Comments on Posts
+    # Seed Sample Comments on Posts (only if not already present)
     cursor.execute('''
-    INSERT OR REPLACE INTO post_comments (id, post_id, author_id, text, created_at)
+    INSERT OR IGNORE INTO post_comments (id, post_id, author_id, text, created_at)
     VALUES 
     ('comment-1', 'post-m1', 'julian', 'The mechanical feel of those 70s shutters is unmatched. Great restoration!', ?),
     ('comment-2', 'post-m1', 'elena', 'Would love to see some darkroom prints from it in the greenhouse!', ?),
@@ -794,51 +773,51 @@ def seed_example_data(cursor, conn):
     ('comment-4', 'post-e1', 'maya', 'The ear on that boule is gorgeous! Wild yeast fermentation for the win.', ?)
     ''', (now - 3600 * 2, now - 3600, now - 3600 * 6, now - 3600 * 18))
 
-    # Seed Sample Friendships
+    # Seed Sample Friendships (only if not already present)
     cursor.execute('''
-    INSERT OR REPLACE INTO friendships (id, user_id, friend_id, status, created_at, updated_at)
+    INSERT OR IGNORE INTO friendships (id, user_id, friend_id, status, created_at, updated_at)
     VALUES 
     ('friend-julian-maya', 'julian', 'maya', 'accepted', ?, ?),
     ('friend-adam-maya', 'usr-adam', 'maya', 'accepted', ?, ?),
     ('friend-elena-adam', 'elena', 'usr-adam', 'pending', ?, ?)
     ''', (now - 86400 * 2, now - 86400 * 2, now - 86400, now - 86400, now - 3600, now - 3600))
 
-    # Seed an Initial Direct Message between Maya and Adam
+    # Seed an Initial Direct Message between Maya and Adam (only if not already present)
     cursor.execute('''
     INSERT OR IGNORE INTO direct_messages (id, sender_id, recipient_id, text, created_at, read)
     VALUES ('msg-seed-1', 'maya', 'usr-adam', 'Hey Adam! Loving the new verified human platform updates. No bots allowed! 🚀', ?, 0)
     ''', (now - 1800,))
 
-    # Seed Commons items marked clearly as EXAMPLES
+    # Seed Commons items marked clearly as EXAMPLES (only if not already present)
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    INSERT OR IGNORE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
     VALUES ('aid-ex-1', 'elena', 'offer', 'food', 'Fresh Artisan Sourdough Boule', '36-hour cold fermented sourdough baked this morning. Crisp crust, open crumb. [ARCHIVED EXAMPLE LISTING]', 'assets/sourdough.jpg', 'Seattle, WA (Capitol Hill)', 47.6253, -122.3222, 'Capitol Hill, Seattle, Washington, United States', 1, 'archived_example', ?)
     ''', (now - 3600 * 12,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    INSERT OR IGNORE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
     VALUES ('aid-ex-2', 'maya', 'offer', 'skills', '35mm Film Camera Loan & Darkroom Coaching', 'Loan of mechanical film body with 50mm f/1.8 lens, plus darkroom coaching session. [ARCHIVED EXAMPLE LISTING]', 'assets/vintage-camera.jpg', 'San Francisco, CA (Mission)', 37.7599, -122.4148, 'Mission District, San Francisco, California, United States', 1, 'archived_example', ?)
     ''', (now - 3600 * 18,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    INSERT OR IGNORE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
     VALUES ('aid-ex-3', 'julian', 'offer', 'skills', 'Woodworking & Tool Sharpening Aid', 'Bring dull chisels or broken wooden joinery for repair assistance. [ARCHIVED EXAMPLE LISTING]', NULL, 'Portland, OR (Hawthorne)', 45.5121, -122.6231, 'Hawthorne, Portland, Oregon, United States', 1, 'archived_example', ?)
     ''', (now - 3600 * 24,))
 
-    # Seed 2 Hyper-Local Active Mutual Aid Listings in Los Banos, CA
+    # Seed 2 Hyper-Local Active Mutual Aid Listings in Los Banos, CA (only if not already present)
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    INSERT OR IGNORE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
     VALUES ('aid-lb-lemons', 'usr-adam', 'offer', 'food', 'Fresh Backyard Meyer Lemons & Fragrant Rosemary', 'Freshly picked from the backyard lemon tree in Los Banos. Sweet, juicy, and pesticide-free. Come take a basket!', NULL, 'Los Banos, CA', 37.0592, -120.8505, 'Los Banos, Merced County, California, United States', 0, 'active', ?)
     ''', (now - 3600 * 2,))
 
     cursor.execute('''
-    INSERT OR REPLACE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
+    INSERT OR IGNORE INTO commons_items (id, author_id, type, category, title, desc, image_url, location, latitude, longitude, formatted_address, is_example, status, created_at)
     VALUES ('aid-lb-bikepump', 'usr-adam', 'offer', 'tools', 'Heavy-Duty Bicycle Floor Pump & Repair Stand Loan', 'Professional-grade Topeak floor pump with pressure gauge and Park Tool portable stand. Available for community loan.', NULL, 'Pacheco Blvd, Los Banos, CA', 37.0566, -120.8487, 'Pacheco Blvd, Los Banos, California, United States', 0, 'active', ?)
     ''', (now - 3600 * 4,))
 
-    # Seed one simulated suspicious Bot account for the Admin console demonstration
+    # Seed one simulated suspicious Bot account for the Admin console demonstration (only if not already present)
     cursor.execute('''
-    INSERT OR REPLACE INTO users (
+    INSERT OR IGNORE INTO users (
         id, handle, name, email, phone, bio, avatar, banner,
         music_title, music_source, privacy, is_admin, is_example,
         is_banned, registered_ip, bot_score, bot_flags, entropy_score, karma,

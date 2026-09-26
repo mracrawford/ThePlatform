@@ -98,9 +98,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const defaultHostId = STATE.currentUser?.id || 'usr-adam';
   loadPlatform(defaultHostId, false);
 
-  // Set default Home view to Topics & Trending
-  document.getElementById('navTabTopics')?.click();
-  await fetchAndRenderTopics();
+  // Route to Platform if hash or param is set; otherwise default Home view to Topics & Trending
+  const currentHash = (window.location.hash || '').toLowerCase();
+  const currentParams = new URLSearchParams(window.location.search);
+  if (currentHash === '#platform' || currentHash === '#platforms' || currentParams.get('tab') === 'platform' || currentParams.get('tab') === 'platforms') {
+    switchToPlatformTab(null, false);
+  } else {
+    document.getElementById('navTabTopics')?.click();
+    await fetchAndRenderTopics();
+  }
 });
 
 // --- ASTROLOGICAL ZODIAC CALCULATOR (NO GENDER) ---
@@ -6010,7 +6016,8 @@ function initFeatureGuideModal() {
 
   // Display on first arrival if user hasn't seen the guide yet
   const hasSeen = localStorage.getItem('tp_seen_feature_guide_v2');
-  if (!hasSeen) {
+  const isDirectPlatformView = window.location.hash.includes('platform') || window.location.search.includes('platform');
+  if (!hasSeen && !isDirectPlatformView) {
     setTimeout(() => {
       modal?.showModal();
     }, 700);

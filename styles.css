@@ -739,15 +739,28 @@ body {
 /* Profile Header Card (Floating over Banner) */
 .profile-header-card {
   position: relative;
-  margin-top: -90px;
+  margin-top: -80px;
   padding: 0 32px 28px 32px;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 28px;
   flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .profile-avatar-wrap {
+  position: relative;
+  width: 140px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.avatar-main-frame {
   position: relative;
   width: 136px;
   height: 136px;
@@ -778,17 +791,33 @@ body {
   border-radius: var(--radius-full);
   border: 2px solid var(--theme-bg);
   box-shadow: 0 2px 8px var(--sys-success-glow);
+  white-space: nowrap;
+}
+
+.avatar-reel-container {
+  width: 100%;
+  max-width: 140px;
+  background: rgba(14, 16, 26, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--radius-md);
+  padding: 6px 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
 }
 
 .profile-meta-primary {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 500px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .profile-name-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px 14px;
   flex-wrap: wrap;
   margin-bottom: 6px;
 }
@@ -798,8 +827,9 @@ body {
   font-size: 2.1rem;
   font-weight: 800;
   color: var(--theme-text-main);
-  line-height: 1.1;
+  line-height: 1.15;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .profile-handle {
@@ -807,6 +837,7 @@ body {
   font-size: 1.05rem;
   color: var(--theme-primary-light);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .privacy-pill {
@@ -817,6 +848,9 @@ body {
   background: rgba(16, 185, 129, 0.15);
   color: var(--sys-success);
   border: 1px solid rgba(16, 185, 129, 0.3);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 .privacy-pill.private {
@@ -833,6 +867,9 @@ body {
   background: rgba(255, 255, 255, 0.08);
   color: var(--theme-text-muted);
   border: 1px solid rgba(255, 255, 255, 0.15);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 .profile-bio {
@@ -857,10 +894,15 @@ body {
 }
 
 .profile-actions {
+  width: 100%;
+  flex: 0 0 100%;
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ==========================================================================
@@ -2425,6 +2467,9 @@ select option {
   background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.4);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 .badge-account-type.real-human {
@@ -3092,18 +3137,7 @@ select option {
    MULTI-PROFILE PICTURES PHOTO REEL & 1-CLICK SWAPPER
    ========================================================================== */
 
-.profile-avatar-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-.avatar-main-frame {
-  position: relative;
-  width: 120px;
-  height: 120px;
-}
+/* Multi-photo reel container positioned under avatar */
 
 .avatar-reel-container {
   width: 100%;
@@ -3222,6 +3256,7 @@ select option {
   letter-spacing: 0.08em;
   color: var(--theme-primary-light);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .profile-top-passions {
@@ -3896,6 +3931,7 @@ select option {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 
 .commons-verified-pill {
@@ -3909,6 +3945,7 @@ select option {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 
 /* Commons Verification Modal Upload UI */
@@ -4030,6 +4067,11 @@ select option {
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 16px rgba(168, 85, 247, 0.15);
   animation: fadeInDown 0.35s ease;
+  white-space: nowrap;
+}
+
+.host-motto-text {
+  white-space: nowrap;
 }
 
 .motto-quote-glyph {

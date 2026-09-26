@@ -172,6 +172,7 @@ function loadUserSession() {
               STATE.currentUser = data.user;
               localStorage.setItem('theplatform_user', JSON.stringify(data.user));
               updateUserChipUI();
+              renderPlatformSwitcherPills();
             }
           }).catch(() => {});
         }
@@ -180,6 +181,7 @@ function loadUserSession() {
   }
 
   updateUserChipUI();
+  renderPlatformSwitcherPills();
 }
 
 function saveUserSession(user) {
@@ -197,6 +199,7 @@ function saveUserSession(user) {
     } catch {}
   }
   updateUserChipUI();
+  renderPlatformSwitcherPills();
   initE2EE().catch(() => {});
 }
 
@@ -359,15 +362,6 @@ function initNavigation() {
     document.getElementById('navTabTopics')?.click();
   });
 
-  document.getElementById('currentUserChip')?.addEventListener('click', () => {
-    if (STATE.currentUser) {
-      // Jump to current user's own platform
-      switchToPlatformTab(STATE.currentUser.id, false);
-    } else {
-      document.getElementById('registerModal')?.showModal();
-    }
-  });
-
   document.getElementById('refreshAdminDataBtn')?.addEventListener('click', () => {
     loadAdminDashboardData();
   });
@@ -388,10 +382,13 @@ function initBrandSwitcher() {
 // --- PLATFORM SWITCHER PILLS ---
 function renderPlatformSwitcherPills() {
   const container = document.getElementById('platformPillsContainer');
+  if (!container) return;
   container.innerHTML = '';
 
+  const loggedInUserId = (STATE.currentUser && STATE.currentUser.id) ? STATE.currentUser.id : null;
+
   STATE.usersList.forEach(user => {
-    const isYou = STATE.currentUser && user.id === STATE.currentUser.id;
+    const isYou = Boolean(loggedInUserId && user.id === loggedInUserId);
     const isExample = user.is_example === 1;
 
     const pill = document.createElement('button');
@@ -2638,6 +2635,26 @@ function initLoginModal() {
 }
 
 // --- USER DROPDOWN & LOGOUT ---
+function logoutUser() {
+  const menu = document.getElementById('userDropdownMenu');
+  if (menu) menu.classList.add('hidden');
+  try {
+    localStorage.removeItem('theplatform_user');
+  } catch {}
+  STATE.currentUser = null;
+  updateUserChipUI();
+  renderPlatformSwitcherPills();
+
+  // If viewing a platform, reload with visitor permissions
+  if (STATE.activeHostId) {
+    loadPlatform(STATE.activeHostId, false);
+  }
+
+  showToast('Logged out of platform. You are now browsing as a visitor.', 'info');
+  document.getElementById('navTabTopics')?.click();
+}
+window.logoutUser = logoutUser;
+
 function initUserDropdownMenu() {
   const chip = document.getElementById('currentUserChip');
   const menu = document.getElementById('userDropdownMenu');
@@ -2649,7 +2666,7 @@ function initUserDropdownMenu() {
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!STATE.currentUser) {
-        document.getElementById('loginModal').showModal();
+        document.getElementById('loginModal')?.showModal();
       } else {
         menu.classList.toggle('hidden');
       }
@@ -2680,12 +2697,7 @@ function initUserDropdownMenu() {
 
   if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
-      menu.classList.add('hidden');
-      localStorage.removeItem('theplatform_user');
-      STATE.currentUser = null;
-      updateUserChipUI();
-      showToast('Logged out of platform. You are now browsing as a visitor.', 'info');
-      document.getElementById('navTabTopics')?.click();
+      logoutUser();
     });
   }
 }

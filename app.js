@@ -241,6 +241,13 @@ function updateUserChipUI() {
   const menuHandle = document.getElementById('menuUserHandle');
   const menuEmail = document.getElementById('menuUserEmail');
 
+  const menuLoginItem = document.getElementById('menuLoginItemBtn');
+  const menuRegisterItem = document.getElementById('menuRegisterItemBtn');
+  const menuMyPlatform = document.getElementById('menuMyPlatformBtn');
+  const menuEditProfile = document.getElementById('menuEditProfileBtn');
+  const menuLogout = document.getElementById('menuLogoutBtn');
+  const menuLogoutDiv = document.getElementById('menuLogoutDivider');
+
   if (STATE.currentUser) {
     chipAvatar.src = STATE.currentUser.avatar || 'assets/avatar-p-default.svg';
     chipName.textContent = STATE.currentUser.name;
@@ -260,6 +267,13 @@ function updateUserChipUI() {
 
     if (navLoginBtn) navLoginBtn.style.display = 'none';
     if (navRegisterBtn) navRegisterBtn.innerHTML = `<span>+ New Account</span>`;
+
+    if (menuLoginItem) menuLoginItem.style.display = 'none';
+    if (menuRegisterItem) menuRegisterItem.style.display = 'none';
+    if (menuMyPlatform) menuMyPlatform.style.display = 'flex';
+    if (menuEditProfile) menuEditProfile.style.display = 'flex';
+    if (menuLogout) menuLogout.style.display = 'flex';
+    if (menuLogoutDiv) menuLogoutDiv.style.display = 'block';
   } else {
     chipAvatar.src = 'assets/avatar-p-default.svg';
     chipName.textContent = 'Visitor';
@@ -270,6 +284,13 @@ function updateUserChipUI() {
     if (navRegisterBtn) navRegisterBtn.innerHTML = `<span>✨ Create Your Platform</span>`;
     if (menuHandle) menuHandle.textContent = '@visitor';
     if (menuEmail) menuEmail.textContent = 'Please log in';
+
+    if (menuLoginItem) menuLoginItem.style.display = 'flex';
+    if (menuRegisterItem) menuRegisterItem.style.display = 'flex';
+    if (menuMyPlatform) menuMyPlatform.style.display = 'none';
+    if (menuEditProfile) menuEditProfile.style.display = 'none';
+    if (menuLogout) menuLogout.style.display = 'none';
+    if (menuLogoutDiv) menuLogoutDiv.style.display = 'none';
   }
 }
 
@@ -3000,6 +3021,8 @@ window.logoutUser = logoutUser;
 function initUserDropdownMenu() {
   const chip = document.getElementById('currentUserChip');
   const menu = document.getElementById('userDropdownMenu');
+  const loginItemBtn = document.getElementById('menuLoginItemBtn');
+  const registerItemBtn = document.getElementById('menuRegisterItemBtn');
   const myPlatformBtn = document.getElementById('menuMyPlatformBtn');
   const editProfileBtn = document.getElementById('menuEditProfileBtn');
   const logoutBtn = document.getElementById('menuLogoutBtn');
@@ -3009,9 +3032,18 @@ function initUserDropdownMenu() {
     const rect = chip.getBoundingClientRect();
     menu.style.position = 'fixed';
     menu.style.top = `${Math.round(rect.bottom + 8)}px`;
-    menu.style.right = `${Math.max(12, Math.round(window.innerWidth - rect.right))}px`;
-    menu.style.left = 'auto';
-    menu.style.zIndex = '1300';
+    menu.style.zIndex = '99999';
+
+    if (window.innerWidth <= 480) {
+      menu.style.right = '8px';
+      menu.style.left = 'auto';
+      menu.style.maxWidth = 'calc(100vw - 16px)';
+    } else {
+      const rightDist = Math.max(12, Math.round(window.innerWidth - rect.right));
+      menu.style.right = `${rightDist}px`;
+      menu.style.left = 'auto';
+      menu.style.maxWidth = '280px';
+    }
   }
   window.positionUserDropdownGlobal = positionUserDropdown;
 
@@ -3021,20 +3053,32 @@ function initUserDropdownMenu() {
   if (chip && menu) {
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!STATE.currentUser) {
-        document.getElementById('loginModal')?.showModal();
-      } else {
-        menu.classList.toggle('hidden');
-        if (!menu.classList.contains('hidden')) {
-          positionUserDropdown();
-        }
+      document.getElementById('notificationsDropdown')?.classList.add('hidden');
+      const willOpen = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden');
+      if (willOpen) {
+        positionUserDropdown();
       }
     });
 
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.user-chip-wrapper') && !e.target.closest('.user-dropdown-menu')) {
+      if (!e.target.closest('#currentUserChip') && !e.target.closest('#userDropdownMenu')) {
         menu.classList.add('hidden');
       }
+    });
+  }
+
+  if (loginItemBtn) {
+    loginItemBtn.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      document.getElementById('loginModal')?.showModal();
+    });
+  }
+
+  if (registerItemBtn) {
+    registerItemBtn.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      document.getElementById('registrationModal')?.showModal();
     });
   }
 
@@ -6332,7 +6376,7 @@ function initNotificationsSystem() {
     const btnRect = btn.getBoundingClientRect();
     dropdown.style.position = 'fixed';
     dropdown.style.top = `${Math.round(btnRect.bottom + 8)}px`;
-    dropdown.style.zIndex = '1300';
+    dropdown.style.zIndex = '99999';
 
     if (window.innerWidth <= 768) {
       dropdown.style.left = '12px';
@@ -6350,6 +6394,7 @@ function initNotificationsSystem() {
 
   btn?.addEventListener('click', (e) => {
     e.stopPropagation();
+    document.getElementById('userDropdownMenu')?.classList.add('hidden');
     const willOpen = dropdown?.classList.contains('hidden');
     dropdown?.classList.toggle('hidden');
     if (willOpen) {
@@ -6410,7 +6455,7 @@ function initNotificationsSystem() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.notifications-wrapper')) {
+    if (!e.target.closest('#navNotificationsBtn') && !e.target.closest('#notificationsDropdown')) {
       dropdown?.classList.add('hidden');
     }
   });

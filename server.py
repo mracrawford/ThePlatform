@@ -739,6 +739,7 @@ def seed_example_data(cursor, conn):
             registered_ip, bot_score, bot_flags, entropy_score, karma,
             aesthetic_name, font_heading, font_body, created_at,
             password_hash, password_salt, passions, subtopics, avatars, youtube_url, location,
+            latitude, longitude, formatted_address,
             dob, show_zodiac, zodiac_sign, commons_verified, motto
         ) VALUES (
             'usr-adam', '@adam', 'Adam', 'mracrawford@gmail.com', '555-012-3456',
@@ -747,7 +748,8 @@ def seed_example_data(cursor, conn):
             'Lofi Ambient Chillhop', 'YouTube Audio Link', 'public', 1, 0,
             '127.0.0.1', 0.0, '[]', 0.99, 45,
             'Modernist', "'Plus Jakarta Sans', sans-serif", "'Inter', sans-serif", ?,
-            ?, ?, ?, ?, ?, ?, 'San Francisco, CA',
+            ?, ?, ?, ?, ?, ?, 'Los Banos, CA',
+            37.0592, -120.8505, 'Los Banos, Merced County, California, United States',
             '1988-08-14', 1, '♌ Leo', 1, 'Solidarity Forever ✊🌹'
         )
         ''', (
@@ -3037,14 +3039,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 data.get('email'),
                 data.get('handle')
             )
-            # Extra safety fallback: if user still not found, check if this is the only non-example user or Adam
-            if not current:
-                cur.execute("SELECT * FROM users WHERE LOWER(email) = 'mracrawford@gmail.com' OR id = 'usr-adam' OR LOWER(handle) = '@adam'")
-                current = cur.fetchone()
-
             if not current:
                 conn.close()
-                self.send_json(404, {"error": "User not found."})
+                self.send_json(401, {"error": "Authentication required. User not found."})
                 return
 
             user_id = current['id']

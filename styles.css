@@ -264,12 +264,36 @@ body {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.35) transparent;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.top-nav::-webkit-scrollbar {
+  height: 3px;
+}
+
+.top-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.top-nav::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.35);
+  border-radius: 4px;
+}
+
+.top-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.7);
 }
 
 .nav-left {
   display: flex;
   align-items: center;
   gap: 18px;
+  flex-shrink: 0;
 }
 
 .brand-link {
@@ -324,7 +348,9 @@ body {
 .nav-center {
   flex: 1;
   max-width: 520px;
+  min-width: 260px;
   margin: 0 24px;
+  flex-shrink: 0;
 }
 
 .search-box {
@@ -423,6 +449,7 @@ body {
   display: flex;
   align-items: center;
   gap: 20px;
+  flex-shrink: 0;
 }
 
 .nav-tabs {
@@ -433,6 +460,8 @@ body {
   padding: 4px;
   border-radius: var(--radius-full);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .nav-tab-btn {
@@ -8684,6 +8713,11 @@ select option {
 
 .hearths-header {
   margin-bottom: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 20px;
 }
 
 .hearths-badge {
@@ -8714,6 +8748,366 @@ select option {
   color: var(--theme-text-dim);
   line-height: 1.6;
   max-width: 680px;
+}
+
+/* Hearth Top Actions (Passcode Box & Create Button) */
+.hearths-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hearth-passcode-bar {
+  display: flex;
+  align-items: center;
+  background: rgba(18, 20, 32, 0.85);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(249, 115, 22, 0.28);
+  border-radius: var(--radius-full);
+  padding: 4px 6px 4px 14px;
+  gap: 10px;
+  transition: var(--transition-fast);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.hearth-passcode-bar:focus-within {
+  border-color: #f97316;
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.4);
+}
+
+.hearth-passcode-icon {
+  font-size: 0.95rem;
+  color: #fb923c;
+}
+
+.hearth-passcode-input {
+  background: transparent;
+  border: none;
+  color: var(--theme-text-main);
+  font-size: 0.86rem;
+  width: 230px;
+  outline: none;
+}
+
+.hearth-passcode-input::placeholder {
+  color: var(--theme-text-dim);
+}
+
+.hearth-passcode-btn {
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  padding: 6px 14px;
+  background: rgba(249, 115, 22, 0.16);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  color: #fed7aa;
+  white-space: nowrap;
+}
+
+.hearth-passcode-btn:hover {
+  background: rgba(249, 115, 22, 0.3);
+  border-color: #f97316;
+  color: #ffffff;
+}
+
+.hearth-create-btn {
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%);
+  border: 1px solid rgba(251, 146, 60, 0.4);
+  color: #ffffff;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 4px 18px rgba(234, 88, 12, 0.4);
+  transition: var(--transition-fast);
+  white-space: nowrap;
+}
+
+.hearth-create-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(234, 88, 12, 0.6);
+}
+
+/* Category & Title Row */
+.hearth-room-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hearth-cat-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: var(--theme-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #c084fc;
+}
+
+.hearth-cat-badge.music {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.4);
+  color: #38bdf8;
+}
+
+/* Music Lounge Drag & Drop and Active Player */
+.hearth-music-area {
+  margin: 18px 0 24px;
+  width: 100%;
+}
+
+.hearth-audio-dropzone {
+  background: rgba(14, 165, 233, 0.03);
+  border: 2px dashed rgba(56, 189, 248, 0.32);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  text-align: center;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  position: relative;
+}
+
+.hearth-audio-dropzone:hover, .hearth-audio-dropzone.dragover {
+  background: rgba(14, 165, 233, 0.09);
+  border-color: #38bdf8;
+  box-shadow: 0 0 30px rgba(56, 189, 248, 0.25);
+  transform: scale(1.008);
+}
+
+.dropzone-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.dropzone-icon-ring {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+}
+
+.dropzone-music-icon {
+  font-size: 1.6rem;
+}
+
+.dropzone-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.dropzone-desc {
+  font-size: 0.84rem;
+  color: var(--theme-text-muted);
+  max-width: 480px;
+  margin: 0;
+}
+
+.dropzone-browse-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.dropzone-pill {
+  font-size: 0.72rem;
+  font-family: var(--theme-font-mono);
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  margin-top: 4px;
+}
+
+/* Active Music Player Bar in Hearth */
+.hearth-active-player {
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  border-radius: var(--radius-lg);
+  padding: 16px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(129, 140, 248, 0.2);
+  animation: fadeInDown 0.3s ease-out;
+}
+
+.player-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.player-equalizer-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px;
+}
+
+.player-equalizer-bars .p-bar {
+  width: 4px;
+  height: 10px;
+  background: linear-gradient(to top, #38bdf8, #818cf8);
+  border-radius: 2px;
+  animation: hearthEqBounce 1.2s infinite alternate ease-in-out;
+}
+
+.player-equalizer-bars .p-bar:nth-child(1) { height: 16px; animation-delay: 0.1s; }
+.player-equalizer-bars .p-bar:nth-child(2) { height: 26px; animation-delay: 0.35s; }
+.player-equalizer-bars .p-bar:nth-child(3) { height: 8px;  animation-delay: 0.2s; }
+.player-equalizer-bars .p-bar:nth-child(4) { height: 22px; animation-delay: 0.5s; }
+.player-equalizer-bars .p-bar:nth-child(5) { height: 14px; animation-delay: 0.15s; }
+
+@keyframes hearthEqBounce {
+  0% { height: 6px; }
+  50% { height: 26px; }
+  100% { height: 10px; }
+}
+
+.player-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--theme-font-mono);
+  letter-spacing: 0.08em;
+  color: #38bdf8;
+}
+
+.player-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 450px;
+}
+
+.player-by {
+  font-size: 0.78rem;
+  color: var(--theme-text-muted);
+}
+
+.player-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Privacy Radio Cards in Modal */
+.hearth-privacy-radios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+@media (max-width: 600px) {
+  .hearth-privacy-radios {
+    grid-template-columns: 1fr;
+  }
+}
+
+.privacy-radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.privacy-radio-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.privacy-radio-card.active {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: #f97316;
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.2);
+}
+
+.privacy-radio-card input[type="radio"] {
+  margin-top: 3px;
+  accent-color: #f97316;
+}
+
+.privacy-radio-title {
+  display: block;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.privacy-radio-desc {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--theme-text-dim);
+  line-height: 1.35;
+}
+
+.hearth-pin-input-wrap {
+  position: relative;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.hearth-pin-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.95rem;
+  color: #fb923c;
+}
+
+.hearth-pin-input-wrap input {
+  width: 100%;
+  padding-left: 42px !important;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 0.92rem;
+  outline: none;
+  transition: var(--transition-fast);
+}
+
+.hearth-pin-input-wrap input:focus {
+  border-color: #f97316;
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.3);
 }
 
 .hearths-browse-grid {

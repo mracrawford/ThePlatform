@@ -12,6 +12,7 @@ import re
 import hashlib
 import secrets
 import socket
+import base64
 import sys
 import math
 import urllib.request
@@ -87,6 +88,10 @@ LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 6
 LOGIN_LOCKOUT_WINDOW = 300  # 5 minutes
 
+# Ensure uploads/hearth_audio exists for drag-and-drop music files
+HEARTH_AUDIO_DIR = os.path.join(STATIC_DIR, 'uploads', 'hearth_audio')
+os.makedirs(HEARTH_AUDIO_DIR, exist_ok=True)
+
 # Ephemeral Fireside Hearths (In-memory real-time live rooms)
 FIRESIDE_HEARTHS = {
     "hearth-solidarity": {
@@ -94,21 +99,39 @@ FIRESIDE_HEARTHS = {
         "name": "Solidarity & Open Commons",
         "topic": "Human-first technology, mutual aid & ethics",
         "emoji": "🔥",
-        "occupants": {}
+        "category": "general",
+        "is_private": False,
+        "passcode": None,
+        "created_by": "system",
+        "created_by_name": "The Platform",
+        "occupants": {},
+        "active_track": None
     },
     "hearth-acoustic": {
         "id": "hearth-acoustic",
         "name": "Acoustic Ambient Corner",
         "topic": "Late night music shares, vinyl vibes & chill discussion",
         "emoji": "🎸",
-        "occupants": {}
+        "category": "music",
+        "is_private": False,
+        "passcode": None,
+        "created_by": "system",
+        "created_by_name": "The Platform",
+        "occupants": {},
+        "active_track": None
     },
     "hearth-garden": {
         "id": "hearth-garden",
         "name": "Community Roots & Garden Guild",
         "topic": "Heirloom seeds, neighborhood projects & food autonomy",
         "emoji": "🌱",
-        "occupants": {}
+        "category": "ecology",
+        "is_private": False,
+        "passcode": None,
+        "created_by": "system",
+        "created_by_name": "The Platform",
+        "occupants": {},
+        "active_track": None
     }
 }
 
@@ -1106,9 +1129,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
         except (ValueError, TypeError):
             content_length = 0
 
-        # Protect against memory exhaustion DoS (max 15MB for voice notes & image attachments)
-        if content_length > 15 * 1024 * 1024:
-            self.send_json(413, {"error": "Payload exceeds maximum allowed size of 15MB."})
+        # Protect against memory exhaustion DoS (max 25MB to accommodate 10MB audio tracks encoded in base64)
+        if content_length > 25 * 1024 * 1024:
+            self.send_json(413, {"error": "Payload exceeds maximum allowed size of 25MB."})
             return
 
         post_body = self.rfile.read(content_length) if content_length > 0 else b'{}'
@@ -1194,20 +1217,55 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"collectives": rows})
             return
 
-        # 0c. GET /api/lounges - List Active Fireside Hearth Rooms
+        # 0c. GET /api/lounges - List Active Fireside Hearth Rooms (PUBLIC ONLY)
         if path == '/api/lounges':
             conn.close()
             rooms = []
             for k, v in FIRESIDE_HEARTHS.items():
+                # Private Hearths DO NOT show up in the hearth lists!
+                if v.get('is_private'):
+                    continue
                 rooms.append({
                     "id": v['id'],
                     "name": v['name'],
+                    "title": v['name'],
                     "topic": v['topic'],
-                    "emoji": v['emoji'],
+                    "emoji": v.get('emoji', '🔥'),
+                    "category": v.get('category', 'general'),
+                    "is_private": False,
+                    "created_by": v.get('created_by'),
+                    "created_by_name": v.get('created_by_name', 'The Platform'),
                     "occupants": list(v['occupants'].values()),
-                    "occupant_count": len(v['occupants'])
+                    "occupant_count": len(v['occupants']),
+                    "active_track": v.get('active_track')
                 })
             self.send_json(200, {"lounges": rooms})
+            return
+
+        # 0c-2. GET /api/lounges/room - Get specific Hearth details (used for polling inside active private or public rooms)
+        if path == '/api/lounges/room':
+            conn.close()
+            room_id = (query.get('id') and query.get('id')[0]) or ''
+            room = FIRESIDE_HEARTHS.get(room_id)
+            if not room:
+                self.send_json(404, {"error": "Hearth room not found."})
+                return
+            self.send_json(200, {
+                "lounge": {
+                    "id": room['id'],
+                    "name": room['name'],
+                    "title": room['name'],
+                    "topic": room['topic'],
+                    "emoji": room.get('emoji', '🔥'),
+                    "category": room.get('category', 'general'),
+                    "is_private": bool(room.get('is_private')),
+                    "created_by": room.get('created_by'),
+                    "created_by_name": room.get('created_by_name', 'The Platform'),
+                    "occupants": list(room['occupants'].values()),
+                    "occupant_count": len(room['occupants']),
+                    "active_track": room.get('active_track')
+                }
+            })
             return
 
         # 0d. GET /api/commons/radar - Mutual Aid Proximity Radar Clusters (True Geocoding & Distances)
@@ -2281,7 +2339,148 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"message": f"Contributed {amount} karma to the collective treasury! 🌟", "amount": amount, "treasury_karma": new_pool})
             return
 
-        # 0e. POST /api/lounges/join - Join a Fireside Hearth Live Room
+        # 0e. POST /api/lounges/create - Create a Custom Public or Private Hearth
+        if path == '/api/lounges/create':
+            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            if not user:
+                conn.close()
+                self.send_json(401, {"error": "You must be logged in to create a Hearth."})
+                return
+            
+            name = (data.get('name') or '').strip()
+            if not name or len(name) < 2:
+                conn.close()
+                self.send_json(400, {"error": "Hearth name is required (minimum 2 characters)."})
+                return
+            name = name[:60]
+            
+            topic = (data.get('topic') or 'Fireside conversation & live audio').strip()[:140]
+            category = (data.get('category') or 'general').strip().lower()
+            if category not in ['music', 'general', 'philosophy', 'ecology', 'art', 'tech']:
+                category = 'general'
+            
+            is_private = bool(data.get('is_private'))
+            passcode = (data.get('passcode') or '').strip().lower() if is_private else None
+            if is_private and (not passcode or len(passcode) < 2):
+                conn.close()
+                self.send_json(400, {"error": "A passcode or PIN of at least 2 characters is required for private hearths."})
+                return
+            
+            category_emojis = {
+                'music': '🎵',
+                'general': '🔥',
+                'philosophy': '📚',
+                'ecology': '🌱',
+                'art': '🎨',
+                'tech': '💻'
+            }
+            emoji = (data.get('emoji') or '').strip()
+            if not emoji:
+                emoji = category_emojis.get(category, '🔥')
+            else:
+                emoji = emoji[:4]
+            
+            hearth_id = f"hearth-{uuid.uuid4().hex[:8]}"
+            
+            FIRESIDE_HEARTHS[hearth_id] = {
+                "id": hearth_id,
+                "name": name,
+                "title": name,
+                "topic": topic,
+                "emoji": emoji,
+                "category": category,
+                "is_private": is_private,
+                "passcode": passcode,
+                "created_by": user['id'],
+                "created_by_name": user['name'],
+                "created_at": int(time.time()),
+                "occupants": {},
+                "active_track": None
+            }
+            
+            # Automatically join creator into the new hearth
+            for r in FIRESIDE_HEARTHS.values():
+                r['occupants'].pop(user['id'], None)
+            
+            FIRESIDE_HEARTHS[hearth_id]['occupants'][user['id']] = {
+                "id": user['id'],
+                "user_id": user['id'],
+                "name": user['name'],
+                "handle": user['handle'],
+                "avatar": user['avatar'],
+                "is_speaking": False,
+                "is_muted": True,
+                "joined_at": int(time.time()),
+                "last_reaction": "🔥"
+            }
+            
+            conn.close()
+            self.send_json(201, {
+                "message": f"Kindled '{name}'! 🔥",
+                "lounge": {
+                    **FIRESIDE_HEARTHS[hearth_id],
+                    "occupants": list(FIRESIDE_HEARTHS[hearth_id]['occupants'].values()),
+                    "occupant_count": 1
+                }
+            })
+            return
+
+        # 0e-2. POST /api/lounges/join-by-passcode - Join Private Hearth via Passcode or PIN
+        if path == '/api/lounges/join-by-passcode':
+            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            if not user:
+                conn.close()
+                self.send_json(401, {"error": "You must be logged in to enter a private Hearth."})
+                return
+            
+            code = (data.get('passcode') or '').strip().lower()
+            if not code:
+                conn.close()
+                self.send_json(400, {"error": "Please enter a passcode or PIN."})
+                return
+            
+            target_room = None
+            for hid, room in FIRESIDE_HEARTHS.items():
+                if room.get('is_private') and room.get('passcode') and room['passcode'].lower() == code:
+                    target_room = room
+                    break
+                if room.get('is_private') and hid.lower() == code:
+                    target_room = room
+                    break
+            
+            if not target_room:
+                conn.close()
+                self.send_json(404, {"error": "No private hearth found matching that passcode/PIN. Please check and try again."})
+                return
+            
+            lounge_id = target_room['id']
+            for r in FIRESIDE_HEARTHS.values():
+                r['occupants'].pop(user['id'], None)
+            
+            target_room['occupants'][user['id']] = {
+                "id": user['id'],
+                "user_id": user['id'],
+                "name": user['name'],
+                "handle": user['handle'],
+                "avatar": user['avatar'],
+                "is_speaking": False,
+                "is_muted": True,
+                "joined_at": int(time.time()),
+                "last_reaction": "🔥"
+            }
+            
+            conn.close()
+            self.send_json(200, {
+                "message": f"Entered private hearth '{target_room['name']}'! 🔒",
+                "lounge": {
+                    **target_room,
+                    "occupants": list(target_room['occupants'].values()),
+                    "occupant_count": len(target_room['occupants'])
+                }
+            })
+            return
+
+        # 0e-3. POST /api/lounges/join - Join a Fireside Hearth Live Room
         if path == '/api/lounges/join':
             user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
             if not user:
@@ -2293,12 +2492,24 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 conn.close()
                 self.send_json(404, {"error": "Hearth room not found."})
                 return
+            
+            room = FIRESIDE_HEARTHS[lounge_id]
+            # Private room access check
+            if room.get('is_private'):
+                provided_code = (data.get('passcode') or '').strip().lower()
+                is_host = (room.get('created_by') == user['id'])
+                is_already_in = (user['id'] in room['occupants'])
+                if not is_host and not is_already_in and provided_code != (room.get('passcode') or '').lower():
+                    conn.close()
+                    self.send_json(403, {"error": "This hearth is private. Please enter the passcode to join.", "requires_passcode": True})
+                    return
 
             for r in FIRESIDE_HEARTHS.values():
                 r['occupants'].pop(user['id'], None)
 
-            FIRESIDE_HEARTHS[lounge_id]['occupants'][user['id']] = {
+            room['occupants'][user['id']] = {
                 "id": user['id'],
+                "user_id": user['id'],
                 "name": user['name'],
                 "handle": user['handle'],
                 "avatar": user['avatar'],
@@ -2309,10 +2520,11 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             }
             conn.close()
             self.send_json(200, {
-                "message": f"Joined {FIRESIDE_HEARTHS[lounge_id]['name']} 🔥",
+                "message": f"Joined {room['name']} 🔥",
                 "lounge": {
-                    **FIRESIDE_HEARTHS[lounge_id],
-                    "occupants": list(FIRESIDE_HEARTHS[lounge_id]['occupants'].values())
+                    **room,
+                    "occupants": list(room['occupants'].values()),
+                    "occupant_count": len(room['occupants'])
                 }
             })
             return
@@ -2346,6 +2558,136 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             conn.close()
             self.send_json(200, {"success": True})
             return
+
+        # 0h. POST /api/lounges/play-track - Drag & Drop Audio Playback for Music Hearths
+        if path == '/api/lounges/play-track':
+            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            if not user:
+                conn.close()
+                self.send_json(401, {"error": "You must be logged in to share audio."})
+                return
+            
+            lounge_id = data.get('lounge_id')
+            if not lounge_id or lounge_id not in FIRESIDE_HEARTHS:
+                conn.close()
+                self.send_json(404, {"error": "Hearth room not found."})
+                return
+            
+            room = FIRESIDE_HEARTHS[lounge_id]
+            if room.get('category') != 'music':
+                conn.close()
+                self.send_json(400, {"error": "Audio track sharing is only available in music-focused hearths."})
+                return
+            
+            # STRICT CONSTRAINT: Only one song can play at once!
+            current_track = room.get('active_track')
+            if current_track and current_track.get('playing'):
+                conn.close()
+                self.send_json(409, {
+                    "error": f"A song is already playing ('{current_track.get('title')}'). Only one song can play at a time.",
+                    "active_track": current_track
+                })
+                return
+            
+            audio_data = data.get('audio_data') or ''
+            title = (data.get('title') or 'Shared Audio Track').strip()[:100]
+            if not audio_data:
+                conn.close()
+                self.send_json(400, {"error": "No audio file payload provided."})
+                return
+            
+            # Base64 decode
+            if ',' in audio_data:
+                _, b64_str = audio_data.split(',', 1)
+            else:
+                b64_str = audio_data
+            
+            try:
+                audio_bytes = base64.b64decode(b64_str)
+            except Exception:
+                conn.close()
+                self.send_json(400, {"error": "Could not decode audio data."})
+                return
+            
+            # STRICT CONSTRAINT: 10MB maximum file size
+            if len(audio_bytes) > 10 * 1024 * 1024:
+                conn.close()
+                self.send_json(400, {"error": f"Audio file is too large ({len(audio_bytes)/(1024*1024):.1f}MB). Maximum allowed size is 10MB."})
+                return
+            
+            ext = 'mp3'
+            lower_title = title.lower()
+            for cand in ['wav', 'ogg', 'mp3', 'm4a', 'aac']:
+                if lower_title.endswith('.' + cand):
+                    ext = cand
+                    break
+            
+            track_id = f"trk_{uuid.uuid4().hex[:10]}"
+            filename = f"{track_id}.{ext}"
+            file_path = os.path.join(HEARTH_AUDIO_DIR, filename)
+            try:
+                with open(file_path, 'wb') as f:
+                    f.write(audio_bytes)
+            except Exception as e:
+                conn.close()
+                self.send_json(500, {"error": f"Failed to save audio track: {str(e)}"})
+                return
+            
+            track_obj = {
+                "id": track_id,
+                "title": title,
+                "audio_url": f"/uploads/hearth_audio/{filename}",
+                "sender_id": user['id'],
+                "sender_name": user['name'],
+                "sender_handle": user['handle'],
+                "started_at": int(time.time()),
+                "file_size": len(audio_bytes),
+                "playing": True
+            }
+            room['active_track'] = track_obj
+            conn.close()
+            self.send_json(200, {
+                "message": f"Now playing '{title}' in {room['name']}! 🎵",
+                "active_track": track_obj
+            })
+            return
+
+        # 0i. POST /api/lounges/stop-track - Stop the currently playing audio track
+        if path == '/api/lounges/stop-track':
+            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            if not user:
+                conn.close()
+                self.send_json(401, {"error": "Unauthorized"})
+                return
+            
+            lounge_id = data.get('lounge_id')
+            if not lounge_id or lounge_id not in FIRESIDE_HEARTHS:
+                conn.close()
+                self.send_json(404, {"error": "Hearth room not found."})
+                return
+            
+            room = FIRESIDE_HEARTHS[lounge_id]
+            current_track = room.get('active_track')
+            if not current_track or not current_track.get('playing'):
+                conn.close()
+                self.send_json(200, {"message": "No active track is playing."})
+                return
+            
+            # The player who started it, the room creator, an admin, or 'ended' reason can stop
+            is_sender = (current_track.get('sender_id') == user['id'])
+            is_host = (room.get('created_by') == user['id'])
+            is_admin = bool(user['is_admin'] if 'is_admin' in user.keys() else False)
+            is_ended = (data.get('reason') == 'ended')
+            
+            if is_ended or is_sender or is_host or is_admin:
+                room['active_track'] = None
+                conn.close()
+                self.send_json(200, {"message": "Track stopped.", "active_track": None})
+                return
+            else:
+                conn.close()
+                self.send_json(403, {"error": f"Only {current_track.get('sender_name')} or the hearth creator can stop this track."})
+                return
 
         # 0. POST /api/login - Secure Account Authentication
         if path == '/api/login':

@@ -1017,8 +1017,30 @@
             <div class="hearths-badge">EPHEMERAL AUDIO SPACES</div>
             <h1 class="hearths-title">Fireside Hearths 🔥</h1>
             <p class="hearths-subtitle">
-              Spontaneous, real-time voice lounges for 4–8 verified humans. No recordings, zero algorithmic surveillance, pure warmth.
+              Spontaneous, real-time voice lounges for verified humans. No recordings, zero algorithmic surveillance, pure warmth.
             </p>
+          </div>
+
+          <!-- Hearth Top Actions: Private Passcode / PIN Entry & Create Hearth -->
+          <div class="hearths-top-actions">
+            <div class="hearth-passcode-bar" title="Enter Passcode or PIN to join an unlisted private hearth">
+              <span class="hearth-passcode-icon">🔒</span>
+              <input 
+                type="text" 
+                id="hearthPasscodeInput" 
+                class="hearth-passcode-input" 
+                placeholder="Enter Private Passcode or PIN..." 
+                autocomplete="off" 
+                maxlength="32"
+                aria-label="Private Hearth Passcode"
+              >
+              <button type="button" id="hearthJoinPasscodeBtn" class="btn btn-secondary btn-sm hearth-passcode-btn">
+                <span>Join Private Hearth</span>
+              </button>
+            </div>
+            <button type="button" id="openCreateHearthModalBtn" class="btn btn-primary btn-sm hearth-create-btn" title="Create your own public or private hearth">
+              <span>✨ Kindle a Hearth</span>
+            </button>
           </div>
         </div>
 
@@ -1028,7 +1050,10 @@
             <div class="hearth-room-meta">
               <span id="activeHearthEmoji" class="hearth-room-emoji">🔥</span>
               <div>
-                <h2 id="activeHearthName" class="hearth-room-title">Solidarity &amp; Philosophy Hearth</h2>
+                <div class="hearth-room-title-row">
+                  <h2 id="activeHearthName" class="hearth-room-title">Solidarity &amp; Philosophy Hearth</h2>
+                  <span id="activeHearthCategoryBadge" class="hearth-cat-badge">🔥 Discussion</span>
+                </div>
                 <p id="activeHearthTopic" class="hearth-room-topic">Human-first technology, mutual aid &amp; ethics</p>
               </div>
             </div>
@@ -1043,6 +1068,53 @@
             </div>
             <div class="hearth-occupants-circle" id="hearthOccupantsCircle">
               <!-- Occupant avatar seats rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Music Lounge Area (Visible in Music-Based Hearths) -->
+          <div id="hearthMusicArea" class="hearth-music-area hidden">
+            <!-- Dropzone: Active when no track is currently playing -->
+            <div id="hearthAudioDropzone" class="hearth-audio-dropzone" tabindex="0" role="region" aria-label="Drop audio file to play in hearth">
+              <div class="dropzone-inner">
+                <div class="dropzone-icon-ring">
+                  <span class="dropzone-music-icon">🎵</span>
+                </div>
+                <div class="dropzone-copy">
+                  <h4 class="dropzone-title">Drag &amp; Drop Audio Track Here</h4>
+                  <p class="dropzone-desc">Drop an MP3, WAV, or OGG file (max 10MB) to play for everyone gathered at the hearth.</p>
+                </div>
+                <div class="dropzone-action">
+                  <label for="hearthAudioFileInput" class="btn btn-secondary btn-sm dropzone-browse-label">
+                    <span>📂 Or Select Audio File</span>
+                  </label>
+                  <input type="file" id="hearthAudioFileInput" accept=".mp3,.wav,.ogg,.m4a,audio/*" class="sr-only">
+                </div>
+                <div class="dropzone-pill">⚡ Single song queue: Plays unless stopped • 10MB max size</div>
+              </div>
+            </div>
+
+            <!-- Active Player: Active when a track is currently playing -->
+            <div id="hearthActivePlayer" class="hearth-active-player hidden">
+              <div class="player-left">
+                <div class="player-equalizer-bars" aria-hidden="true">
+                  <span class="p-bar"></span>
+                  <span class="p-bar"></span>
+                  <span class="p-bar"></span>
+                  <span class="p-bar"></span>
+                  <span class="p-bar"></span>
+                </div>
+                <div class="player-info">
+                  <span class="player-eyebrow">NOW PLAYING AT THE HEARTH 🎵</span>
+                  <h4 id="hearthTrackTitle" class="player-title">Track Title.mp3</h4>
+                  <span id="hearthTrackBy" class="player-by">Shared by @user</span>
+                </div>
+              </div>
+              <div class="player-right">
+                <audio id="hearthAudioElement" preload="auto"></audio>
+                <button type="button" id="hearthStopMusicBtn" class="btn btn-danger btn-sm" title="Stop song for everyone in the hearth">
+                  <span>⏹️ Stop Song</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2764,6 +2836,93 @@
           <span>Watch on YouTube ↗</span>
         </a>
       </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: KINDLE A NEW HEARTH (PUBLIC OR PRIVATE) -->
+  <dialog id="createHearthModal" class="system-modal" aria-labelledby="createHearthTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge" style="width:40px;height:40px;font-size:1.3rem;">🔥</span>
+          <div>
+            <h3 id="createHearthTitle" class="modal-title">Kindle a New Hearth</h3>
+            <p class="modal-subtitle">Start an ephemeral real-time voice lounge with friends or community</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" id="closeCreateHearthModalBtn" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="createHearthForm" class="modal-form">
+        <div class="form-group">
+          <label for="newHearthName">Hearth Name *</label>
+          <input type="text" id="newHearthName" required placeholder="e.g. Late Night Indie Jams" maxlength="60" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label for="newHearthTopic">Topic or Intention *</label>
+          <input type="text" id="newHearthTopic" required placeholder="e.g. Cozy acoustic demos, late-night tea & mellow talk" maxlength="140" autocomplete="off">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex: 2;">
+            <label for="newHearthCategory">Category *</label>
+            <select id="newHearthCategory">
+              <option value="music">🎵 Music Lounge (Drag &amp; Drop Audio Playback)</option>
+              <option value="general" selected>🔥 General Fireside Discussion</option>
+              <option value="philosophy">📚 Philosophy &amp; Human-First Ethics</option>
+              <option value="ecology">🌱 Permaculture, Seeds &amp; Garden Guild</option>
+              <option value="art">🎨 Visual Art &amp; Design</option>
+              <option value="tech">💻 Creative Code &amp; Open Web</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="flex: 1;">
+            <label for="newHearthEmoji">Emoji Icon</label>
+            <input type="text" id="newHearthEmoji" placeholder="🔥" maxlength="4" style="text-align: center;">
+          </div>
+        </div>
+
+        <!-- Privacy selection: Public vs Private with Passcode/PIN -->
+        <div class="form-group">
+          <label>Hearth Privacy</label>
+          <div class="hearth-privacy-radios">
+            <label class="privacy-radio-card active" id="privacyRadioPublicCard">
+              <input type="radio" name="newHearthPrivacy" value="public" checked>
+              <div class="privacy-radio-content">
+                <span class="privacy-radio-title">🌐 Public Hearth</span>
+                <span class="privacy-radio-desc">Visible in the public directory for anyone to join</span>
+              </div>
+            </label>
+            <label class="privacy-radio-card" id="privacyRadioPrivateCard">
+              <input type="radio" name="newHearthPrivacy" value="private">
+              <div class="privacy-radio-content">
+                <span class="privacy-radio-title">🔒 Private Hearth (Unlisted)</span>
+                <span class="privacy-radio-desc">Hidden from the list. Requires Passcode or PIN to enter</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Passcode / PIN Group (shown when Private Hearth is selected) -->
+        <div id="newHearthPasscodeGroup" class="form-group hidden">
+          <label for="newHearthPasscode">Set Passcode or PIN *</label>
+          <div class="hearth-pin-input-wrap">
+            <span class="hearth-pin-icon">🔑</span>
+            <input type="text" id="newHearthPasscode" placeholder="e.g. 7749 or moonlight" maxlength="32" autocomplete="off">
+          </div>
+          <small class="form-hint" style="color: var(--theme-secondary); display: block; margin-top: 6px;">
+            🔒 Users join by entering this passcode in the box at the top of the Hearth screen. This room will never appear in public listings.
+          </small>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 24px;">
+          <button type="button" id="cancelCreateHearthBtn" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="submitCreateHearthBtn" class="btn btn-primary">
+            <span>🔥 Light the Hearth</span>
+          </button>
+        </div>
+      </form>
     </div>
   </dialog>
 

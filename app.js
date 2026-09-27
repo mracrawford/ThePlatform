@@ -50,6 +50,7 @@ const STATE = {
 document.addEventListener('DOMContentLoaded', async () => {
   initEntropyTracker();
   initNavigation();
+  initTopNavHorizontalScroll();
   initBrandSwitcher();
   initThemeEngine();
   initComposer();
@@ -402,6 +403,62 @@ function initNavigation() {
 
   document.getElementById('refreshAdminDataBtn')?.addEventListener('click', () => {
     loadAdminDashboardData();
+  });
+}
+
+function initTopNavHorizontalScroll() {
+  const nav = document.getElementById('globalNav');
+  if (!nav) return;
+
+  // 1. Mouse Wheel to horizontal scroll for PC browser users
+  nav.addEventListener('wheel', (e) => {
+    if (nav.scrollWidth > nav.clientWidth) {
+      if (!e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        nav.scrollLeft += e.deltaY;
+        window.positionNotificationsDropdownGlobal?.();
+        window.positionUserDropdownGlobal?.();
+        window.positionSearchDropdownGlobal?.();
+      }
+    }
+  }, { passive: false });
+
+  // 2. Mouse click-and-drag horizontal scroll for PC users
+  let isDown = false;
+  let startX = 0;
+  let scrollLeft = 0;
+
+  nav.addEventListener('mousedown', (e) => {
+    // Prevent dragging when clicking interactive controls
+    if (e.target.closest('button, input, a, select, textarea, .brand-link, .current-user-chip, .search-box')) return;
+    isDown = true;
+    startX = e.pageX - nav.offsetLeft;
+    scrollLeft = nav.scrollLeft;
+    nav.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (isDown) {
+      isDown = false;
+      nav.style.cursor = '';
+    }
+  });
+
+  nav.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - nav.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    nav.scrollLeft = scrollLeft - walk;
+    window.positionNotificationsDropdownGlobal?.();
+    window.positionUserDropdownGlobal?.();
+    window.positionSearchDropdownGlobal?.();
+  });
+
+  nav.addEventListener('scroll', () => {
+    window.positionNotificationsDropdownGlobal?.();
+    window.positionUserDropdownGlobal?.();
+    window.positionSearchDropdownGlobal?.();
   });
 }
 
@@ -2696,6 +2753,22 @@ function initSearch() {
   const input = document.getElementById('globalSearchInput');
   const dropdown = document.getElementById('searchResultsDropdown');
 
+  function positionSearchDropdown() {
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+    const box = document.querySelector('.search-box');
+    if (!box) return;
+    const rect = box.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = `${Math.round(rect.bottom + 8)}px`;
+    dropdown.style.left = `${Math.round(rect.left)}px`;
+    dropdown.style.width = `${Math.round(rect.width)}px`;
+    dropdown.style.zIndex = '1300';
+  }
+  window.positionSearchDropdownGlobal = positionSearchDropdown;
+
+  window.addEventListener('resize', positionSearchDropdown);
+  window.addEventListener('scroll', positionSearchDropdown, { passive: true });
+
   input.addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
     if (!q) {
@@ -2716,6 +2789,7 @@ function initSearch() {
     if (matches.length === 0) {
       dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.85rem; color: var(--theme-text-dim);">No human platforms found matching "${escapeHtml(q)}"</div>`;
       dropdown.classList.remove('hidden');
+      positionSearchDropdown();
       return;
     }
 
@@ -2734,6 +2808,7 @@ function initSearch() {
     `).join('');
 
     dropdown.classList.remove('hidden');
+    positionSearchDropdown();
   });
 
   document.addEventListener('click', (e) => {
@@ -2929,6 +3004,20 @@ function initUserDropdownMenu() {
   const editProfileBtn = document.getElementById('menuEditProfileBtn');
   const logoutBtn = document.getElementById('menuLogoutBtn');
 
+  function positionUserDropdown() {
+    if (!chip || !menu || menu.classList.contains('hidden')) return;
+    const rect = chip.getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.top = `${Math.round(rect.bottom + 8)}px`;
+    menu.style.right = `${Math.max(12, Math.round(window.innerWidth - rect.right))}px`;
+    menu.style.left = 'auto';
+    menu.style.zIndex = '1300';
+  }
+  window.positionUserDropdownGlobal = positionUserDropdown;
+
+  window.addEventListener('resize', positionUserDropdown);
+  window.addEventListener('scroll', positionUserDropdown, { passive: true });
+
   if (chip && menu) {
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2936,11 +3025,14 @@ function initUserDropdownMenu() {
         document.getElementById('loginModal')?.showModal();
       } else {
         menu.classList.toggle('hidden');
+        if (!menu.classList.contains('hidden')) {
+          positionUserDropdown();
+        }
       }
     });
 
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.user-chip-wrapper')) {
+      if (!e.target.closest('.user-chip-wrapper') && !e.target.closest('.user-dropdown-menu')) {
         menu.classList.add('hidden');
       }
     });
@@ -6237,33 +6329,24 @@ function initNotificationsSystem() {
   function positionNotificationsDropdown() {
     if (!btn || !dropdown || dropdown.classList.contains('hidden')) return;
 
+    const btnRect = btn.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = `${Math.round(btnRect.bottom + 8)}px`;
+    dropdown.style.zIndex = '1300';
+
     if (window.innerWidth <= 768) {
-      const btnRect = btn.getBoundingClientRect();
-      const topPos = Math.max(10, Math.min(window.innerHeight - 200, Math.round(btnRect.bottom + 8)));
-      dropdown.style.position = 'fixed';
-      dropdown.style.top = `${topPos}px`;
       dropdown.style.left = '12px';
       dropdown.style.right = '12px';
       dropdown.style.width = 'auto';
       dropdown.style.maxWidth = 'calc(100vw - 24px)';
     } else {
-      dropdown.style.position = 'absolute';
-      dropdown.style.top = 'calc(100% + 10px)';
-      dropdown.style.left = '';
-      dropdown.style.right = '0';
+      dropdown.style.left = 'auto';
+      dropdown.style.right = `${Math.max(12, Math.round(window.innerWidth - btnRect.right))}px`;
       dropdown.style.width = '370px';
       dropdown.style.maxWidth = 'calc(100vw - 24px)';
-
-      // Prevent left-edge overflow on smaller desktop screens
-      requestAnimationFrame(() => {
-        const rect = dropdown.getBoundingClientRect();
-        if (rect.left < 12) {
-          const shift = 12 - rect.left;
-          dropdown.style.right = `${-shift}px`;
-        }
-      });
     }
   }
+  window.positionNotificationsDropdownGlobal = positionNotificationsDropdown;
 
   btn?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -7304,21 +7387,51 @@ async function loadHearths() {
     const res = await apiRequest('/api/lounges');
     const lounges = res.lounges || [];
 
+    if (lounges.length === 0) {
+      browseGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-lg); border: 1px dashed rgba(255, 255, 255, 0.1);">
+          <span style="font-size: 2.2rem; display: block; margin-bottom: 10px;">🔥</span>
+          <h3 style="font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 6px;">No Public Hearths Active</h3>
+          <p style="color: var(--theme-text-dim); font-size: 0.9rem; max-width: 440px; margin: 0 auto 18px;">
+            The hearth is quiet right now. Kindle a new public or private hearth to gather friends and community!
+          </p>
+          <button type="button" class="btn btn-primary btn-sm" onclick="openCreateHearthModal()">
+            ✨ Kindle the First Hearth
+          </button>
+        </div>
+      `;
+      return;
+    }
+
     browseGrid.innerHTML = lounges.map(l => {
       const occupants = l.occupants || [];
       const avatarsHtml = occupants.slice(0, 4).map(o => `
         <img src="${o.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(o.name)}" class="hearth-preview-avatar">
       `).join('');
 
+      const isMusic = l.category === 'music';
+      const catLabel = isMusic ? '🎵 Music Lounge' : (l.category ? `🔥 ${l.category.toUpperCase()}` : '🔥 Discussion');
+      const activeTrack = l.active_track;
+
       return `
         <div class="hearth-card" id="hearth-card-${l.id}">
           <div class="hearth-card-header">
-            <span class="hearth-card-emoji">${escapeHtml(l.emoji || '🔥')}</span>
-            <div>
-              <h3 class="hearth-card-title">${escapeHtml(l.title)}</h3>
+            <span class="hearth-card-emoji">${escapeHtml(l.emoji || (isMusic ? '🎵' : '🔥'))}</span>
+            <div style="min-width:0; flex:1;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom: 2px;">
+                <h3 class="hearth-card-title">${escapeHtml(l.name || l.title)}</h3>
+                <span class="hearth-cat-badge ${isMusic ? 'music' : ''}">${escapeHtml(catLabel)}</span>
+              </div>
               <p class="hearth-card-topic">${escapeHtml(l.topic)}</p>
             </div>
           </div>
+
+          ${activeTrack && activeTrack.playing ? `
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.76rem; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: var(--radius-full); padding: 4px 12px; color: #38bdf8;">
+              <span>🎶</span>
+              <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Now Playing: ${escapeHtml(activeTrack.title)}</span>
+            </div>
+          ` : ''}
 
           <div class="hearth-occupants-preview">
             ${avatarsHtml}
@@ -7337,17 +7450,19 @@ async function loadHearths() {
 }
 window.loadHearths = loadHearths;
 
-async function joinHearthRoom(loungeId) {
+async function joinHearthRoom(loungeId, passcode = null) {
   if (!STATE.currentUser) {
     showToast('Please log in to enter a Fireside Hearth.', 'warning');
     return;
   }
 
   try {
-    const res = await apiRequest('/api/lounges/join', 'POST', { lounge_id: loungeId });
+    const payload = { lounge_id: loungeId };
+    if (passcode) payload.passcode = passcode;
+    const res = await apiRequest('/api/lounges/join', 'POST', payload);
     STATE.activeLoungeId = loungeId;
     STATE.activeLoungeData = res.lounge;
-    showToast(`Entered ${res.lounge.title}! Warmth surrounds you. 🔥`, 'success');
+    showToast(`Entered ${res.lounge.name || res.lounge.title}! Warmth surrounds you. 🔥`, 'success');
 
     await loadHearths();
     startHearthsPolling();
@@ -7356,6 +7471,57 @@ async function joinHearthRoom(loungeId) {
   }
 }
 window.joinHearthRoom = joinHearthRoom;
+
+async function joinHearthByPasscode() {
+  if (!STATE.currentUser) {
+    showToast('Please log in to enter a private Hearth.', 'warning');
+    return;
+  }
+  const input = document.getElementById('hearthPasscodeInput');
+  const code = (input?.value || '').trim();
+  if (!code) {
+    showToast('Please enter a passcode or PIN.', 'warning');
+    input?.focus();
+    return;
+  }
+
+  try {
+    showToast('Verifying passcode...', 'info');
+    const res = await apiRequest('/api/lounges/join-by-passcode', 'POST', { passcode: code });
+    if (input) input.value = '';
+    STATE.activeLoungeId = res.lounge.id;
+    STATE.activeLoungeData = res.lounge;
+    showToast(`Entered private hearth '${res.lounge.name || res.lounge.title}'! 🔒 Warmth surrounds you.`, 'success');
+    await loadHearths();
+    startHearthsPolling();
+  } catch (err) {
+    showToast(err.message || 'No private hearth found matching that passcode/PIN.', 'danger');
+  }
+}
+window.joinHearthByPasscode = joinHearthByPasscode;
+
+function openCreateHearthModal() {
+  if (!STATE.currentUser) {
+    showToast('Please log in to kindle a Fireside Hearth.', 'warning');
+    return;
+  }
+  const modal = document.getElementById('createHearthModal');
+  const form = document.getElementById('createHearthForm');
+  if (form) form.reset();
+
+  const pubCard = document.getElementById('privacyRadioPublicCard');
+  const privCard = document.getElementById('privacyRadioPrivateCard');
+  const passGroup = document.getElementById('newHearthPasscodeGroup');
+  const passInput = document.getElementById('newHearthPasscode');
+
+  pubCard?.classList.add('active');
+  privCard?.classList.remove('active');
+  passGroup?.classList.add('hidden');
+  if (passInput) passInput.required = false;
+
+  modal?.showModal();
+}
+window.openCreateHearthModal = openCreateHearthModal;
 
 async function leaveHearthRoom() {
   if (!STATE.activeLoungeId) return;
@@ -7370,6 +7536,14 @@ async function leaveHearthRoom() {
   stopHearthsPolling();
   stopFireplaceCrackle();
 
+  // Stop and reset audio element
+  const audioEl = document.getElementById('hearthAudioElement');
+  if (audioEl) {
+    audioEl.pause();
+    audioEl.removeAttribute('data-track-id');
+    audioEl.src = '';
+  }
+
   const micText = document.getElementById('hearthMicText');
   const micIcon = document.getElementById('hearthMicIcon');
   if (micText) micText.textContent = 'Unmute Mic';
@@ -7383,8 +7557,15 @@ async function refreshActiveHearthRoom() {
   if (!STATE.activeLoungeId) return;
 
   try {
-    const res = await apiRequest('/api/lounges');
-    const lounge = (res.lounges || []).find(l => l.id === STATE.activeLoungeId);
+    let lounge = null;
+    try {
+      const singleRes = await apiRequest(`/api/lounges/room?id=${encodeURIComponent(STATE.activeLoungeId)}`);
+      lounge = singleRes.lounge;
+    } catch {
+      const res = await apiRequest('/api/lounges');
+      lounge = (res.lounges || []).find(l => l.id === STATE.activeLoungeId);
+    }
+
     if (!lounge) {
       leaveHearthRoom();
       return;
@@ -7392,9 +7573,72 @@ async function refreshActiveHearthRoom() {
 
     STATE.activeLoungeData = lounge;
 
-    document.getElementById('activeHearthEmoji').textContent = lounge.emoji || '🔥';
-    document.getElementById('activeHearthName').textContent = lounge.title;
-    document.getElementById('activeHearthTopic').textContent = lounge.topic;
+    const emojiEl = document.getElementById('activeHearthEmoji');
+    const nameEl = document.getElementById('activeHearthName');
+    const topicEl = document.getElementById('activeHearthTopic');
+    const catBadge = document.getElementById('activeHearthCategoryBadge');
+
+    if (emojiEl) emojiEl.textContent = lounge.emoji || (lounge.category === 'music' ? '🎵' : '🔥');
+    if (nameEl) nameEl.textContent = lounge.name || lounge.title;
+    if (topicEl) topicEl.textContent = lounge.topic;
+
+    if (catBadge) {
+      const isMusic = lounge.category === 'music';
+      catBadge.textContent = isMusic ? '🎵 Music Lounge' : (lounge.category ? `🔥 ${lounge.category.toUpperCase()}` : '🔥 Discussion');
+      catBadge.className = isMusic ? 'hearth-cat-badge music' : 'hearth-cat-badge';
+    }
+
+    // Music Lounge Audio Area Handling
+    const musicArea = document.getElementById('hearthMusicArea');
+    const dropzone = document.getElementById('hearthAudioDropzone');
+    const player = document.getElementById('hearthActivePlayer');
+    const trackTitleEl = document.getElementById('hearthTrackTitle');
+    const trackByEl = document.getElementById('hearthTrackBy');
+    const audioEl = document.getElementById('hearthAudioElement');
+
+    if (musicArea) {
+      if (lounge.category === 'music') {
+        musicArea.classList.remove('hidden');
+        const activeTrack = lounge.active_track;
+
+        if (activeTrack && activeTrack.playing && activeTrack.audio_url) {
+          // Song is currently playing
+          dropzone?.classList.add('hidden');
+          player?.classList.remove('hidden');
+          if (trackTitleEl) trackTitleEl.textContent = activeTrack.title || 'Shared Audio Track';
+          if (trackByEl) {
+            trackByEl.textContent = `Shared by ${escapeHtml(activeTrack.sender_name || 'Anonymous')} (@${escapeHtml(activeTrack.sender_handle || 'user')})`;
+          }
+
+          if (audioEl) {
+            const currentTrackId = audioEl.getAttribute('data-track-id');
+            if (currentTrackId !== activeTrack.id) {
+              audioEl.setAttribute('data-track-id', activeTrack.id);
+              audioEl.src = activeTrack.audio_url;
+              audioEl.play().catch(e => {
+                console.log('Autoplay deferred until human interaction:', e);
+              });
+            }
+          }
+        } else {
+          // No song playing - reveal dropzone so occupants can drop tracks
+          dropzone?.classList.remove('hidden');
+          player?.classList.add('hidden');
+          if (audioEl && audioEl.getAttribute('data-track-id')) {
+            audioEl.pause();
+            audioEl.removeAttribute('data-track-id');
+            audioEl.src = '';
+          }
+        }
+      } else {
+        musicArea.classList.add('hidden');
+        if (audioEl && audioEl.getAttribute('data-track-id')) {
+          audioEl.pause();
+          audioEl.removeAttribute('data-track-id');
+          audioEl.src = '';
+        }
+      }
+    }
 
     const circle = document.getElementById('hearthOccupantsCircle');
     if (!circle) return;
@@ -7403,11 +7647,11 @@ async function refreshActiveHearthRoom() {
     const currentUserId = STATE.currentUser ? STATE.currentUser.id : null;
 
     circle.innerHTML = occupants.map(o => {
-      const isMe = o.user_id === currentUserId;
+      const isMe = o.user_id === currentUserId || o.id === currentUserId;
       const isSpeaking = o.is_speaking || (isMe && isHearthSpeaking);
 
       return `
-        <div class="hearth-occupant-seat ${isSpeaking ? 'speaking' : ''}" id="hearth-seat-${o.user_id}">
+        <div class="hearth-occupant-seat ${isSpeaking ? 'speaking' : ''}" id="hearth-seat-${o.user_id || o.id}">
           <div class="hearth-occupant-avatar-wrap">
             <div class="hearth-occupant-speaking-ring"></div>
             <img src="${o.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(o.name)}" class="hearth-occupant-avatar">
@@ -7432,6 +7676,62 @@ function stopHearthsPolling() {
     hearthsPollInterval = null;
   }
 }
+
+async function uploadAndPlayHearthAudio(file) {
+  if (!STATE.activeLoungeId) {
+    showToast('You must be inside a hearth room to share audio.', 'warning');
+    return;
+  }
+  if (!STATE.currentUser) {
+    showToast('Please log in to share audio in this hearth.', 'warning');
+    return;
+  }
+
+  // Check file type
+  const lowerName = file.name.toLowerCase();
+  const isAudio = file.type.startsWith('audio/') || ['.mp3', '.wav', '.ogg', '.m4a', '.aac'].some(ext => lowerName.endsWith(ext));
+  if (!isAudio) {
+    showToast('Only audio files (.mp3, .wav, .ogg, .m4a) are supported.', 'warning');
+    return;
+  }
+
+  // STRICT CONSTRAINT: 10MB maximum file size
+  const maxBytes = 10 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    showToast(`Audio file is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed size is 10MB.`, 'danger');
+    return;
+  }
+
+  // STRICT CONSTRAINT: No multiple songs can play at once!
+  if (STATE.activeLoungeData?.active_track?.playing) {
+    showToast(`A song is already playing ('${STATE.activeLoungeData.active_track.title}'). Only one song can play at a time!`, 'warning');
+    return;
+  }
+
+  showToast(`Uploading '${file.name}' to the hearth... 🎵`, 'info');
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const base64Data = reader.result;
+      const res = await apiRequest('/api/lounges/play-track', 'POST', {
+        lounge_id: STATE.activeLoungeId,
+        title: file.name,
+        audio_data: base64Data
+      });
+
+      showToast(`Now playing '${file.name}'! 🎶`, 'success');
+      await refreshActiveHearthRoom();
+    } catch (err) {
+      showToast(err.message || 'Failed to play audio track.', 'danger');
+    }
+  };
+  reader.onerror = () => {
+    showToast('Failed to read audio file from disk.', 'danger');
+  };
+  reader.readAsDataURL(file);
+}
+window.uploadAndPlayHearthAudio = uploadAndPlayHearthAudio;
 
 function toggleFireplaceCrackle() {
   if (isCracklePlaying) {
@@ -7492,7 +7792,7 @@ function stopFireplaceCrackle() {
       hearthCrackleOscillator.stop();
       hearthCrackleOscillator.disconnect();
     } catch {}
-    hearthCrackleOscillator = null;
+      hearthCrackleOscillator = null;
   }
   isCracklePlaying = false;
   const btn = document.getElementById('hearthFireCrackleBtn');
@@ -7518,6 +7818,167 @@ function initHearthsSystem() {
   const micBtn = document.getElementById('hearthMicToggleBtn');
   const crackleBtn = document.getElementById('hearthFireCrackleBtn');
   const reactionBtns = document.querySelectorAll('.btn-hearth-react');
+
+  // Top Bar Private Passcode & Kindle Hearth
+  const passcodeJoinBtn = document.getElementById('hearthJoinPasscodeBtn');
+  const passcodeInput = document.getElementById('hearthPasscodeInput');
+  const openCreateModalBtn = document.getElementById('openCreateHearthModalBtn');
+  const closeCreateModalBtn = document.getElementById('closeCreateHearthModalBtn');
+  const cancelCreateBtn = document.getElementById('cancelCreateHearthBtn');
+  const createModal = document.getElementById('createHearthModal');
+  const createForm = document.getElementById('createHearthForm');
+
+  passcodeJoinBtn?.addEventListener('click', joinHearthByPasscode);
+  passcodeInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      joinHearthByPasscode();
+    }
+  });
+
+  openCreateModalBtn?.addEventListener('click', openCreateHearthModal);
+  closeCreateModalBtn?.addEventListener('click', () => createModal?.close());
+  cancelCreateBtn?.addEventListener('click', () => createModal?.close());
+
+  // Privacy Radio Switcher inside modal
+  const privacyRadios = document.querySelectorAll('input[name="newHearthPrivacy"]');
+  privacyRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+      const isPriv = (radio.value === 'private');
+      const pubCard = document.getElementById('privacyRadioPublicCard');
+      const privCard = document.getElementById('privacyRadioPrivateCard');
+      const passGroup = document.getElementById('newHearthPasscodeGroup');
+      const passInput = document.getElementById('newHearthPasscode');
+      if (isPriv) {
+        privCard?.classList.add('active');
+        pubCard?.classList.remove('active');
+        passGroup?.classList.remove('hidden');
+        if (passInput) {
+          passInput.required = true;
+          passInput.focus();
+        }
+      } else {
+        pubCard?.classList.add('active');
+        privCard?.classList.remove('active');
+        passGroup?.classList.add('hidden');
+        if (passInput) passInput.required = false;
+      }
+    });
+  });
+
+  // Create Hearth Form Submission
+  createForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('newHearthName')?.value.trim();
+    const topic = document.getElementById('newHearthTopic')?.value.trim();
+    const category = document.getElementById('newHearthCategory')?.value || 'general';
+    const emoji = document.getElementById('newHearthEmoji')?.value.trim();
+    const isPrivate = document.querySelector('input[name="newHearthPrivacy"]:checked')?.value === 'private';
+    const passcode = document.getElementById('newHearthPasscode')?.value.trim();
+
+    if (!name) {
+      showToast('Please enter a hearth name.', 'warning');
+      return;
+    }
+    if (isPrivate && (!passcode || passcode.length < 2)) {
+      showToast('A passcode or PIN of at least 2 characters is required for private hearths.', 'warning');
+      return;
+    }
+
+    const submitBtn = document.getElementById('submitCreateHearthBtn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const res = await apiRequest('/api/lounges/create', 'POST', {
+        name,
+        topic,
+        category,
+        emoji,
+        is_private: isPrivate,
+        passcode: isPrivate ? passcode : null
+      });
+
+      createModal?.close();
+      showToast(isPrivate ? `Private hearth '${name}' kindled! 🔒 Keep your passcode handy.` : `Hearth '${name}' kindled! 🔥`, 'success');
+
+      STATE.activeLoungeId = res.lounge.id;
+      STATE.activeLoungeData = res.lounge;
+      await loadHearths();
+      startHearthsPolling();
+    } catch (err) {
+      showToast('Failed to create hearth: ' + err.message, 'danger');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
+  // Music Dropzone & File Input Handling
+  const dropzone = document.getElementById('hearthAudioDropzone');
+  const fileInput = document.getElementById('hearthAudioFileInput');
+  const stopMusicBtn = document.getElementById('hearthStopMusicBtn');
+  const audioEl = document.getElementById('hearthAudioElement');
+
+  if (dropzone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        uploadAndPlayHearthAudio(files[0]);
+      }
+    });
+
+    dropzone.addEventListener('click', (e) => {
+      if (!e.target.closest('label, input, button')) {
+        fileInput?.click();
+      }
+    });
+  }
+
+  fileInput?.addEventListener('change', () => {
+    if (fileInput.files && fileInput.files.length > 0) {
+      uploadAndPlayHearthAudio(fileInput.files[0]);
+      fileInput.value = '';
+    }
+  });
+
+  stopMusicBtn?.addEventListener('click', async () => {
+    if (!STATE.activeLoungeId) return;
+    try {
+      await apiRequest('/api/lounges/stop-track', 'POST', {
+        lounge_id: STATE.activeLoungeId
+      });
+      showToast('Music stopped. ⏹️', 'info');
+      await refreshActiveHearthRoom();
+    } catch (err) {
+      showToast(err.message || 'Could not stop music.', 'warning');
+    }
+  });
+
+  audioEl?.addEventListener('ended', async () => {
+    if (!STATE.activeLoungeId) return;
+    try {
+      await apiRequest('/api/lounges/stop-track', 'POST', {
+        lounge_id: STATE.activeLoungeId,
+        reason: 'ended'
+      });
+      await refreshActiveHearthRoom();
+    } catch {}
+  });
 
   leaveBtn?.addEventListener('click', leaveHearthRoom);
 

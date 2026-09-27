@@ -254,14 +254,17 @@ function updateUserChipUI() {
     if (menuHandle) menuHandle.textContent = STATE.currentUser.handle;
     if (menuEmail) menuEmail.textContent = STATE.currentUser.email || 'Verified Human';
     
-    if (STATE.currentUser.is_admin === 1) {
+    const isCurrentUserAdmin = (STATE.currentUser.is_admin === 1 || STATE.currentUser.id === 'usr-adam');
+    if (isCurrentUserAdmin) {
       chipRoleText.textContent = '🛡️ Root Admin';
       chipRoleText.style.color = '#c084fc';
+      chipAvatar.classList.add('is-admin-avatar');
       // REVEAL ADMIN-ONLY TAB
       if (adminTab) adminTab.classList.remove('hidden');
     } else {
       chipRoleText.textContent = 'Human Verified';
       chipRoleText.style.color = '#34d399';
+      chipAvatar.classList.remove('is-admin-avatar');
       if (adminTab) adminTab.classList.add('hidden');
     }
 
@@ -276,6 +279,7 @@ function updateUserChipUI() {
     if (menuLogoutDiv) menuLogoutDiv.style.display = 'block';
   } else {
     chipAvatar.src = 'assets/avatar-p-default.svg';
+    chipAvatar.classList.remove('is-admin-avatar');
     chipName.textContent = 'Visitor';
     chipRoleText.textContent = 'Not Logged In';
     chipRoleText.style.color = '#94a3b8';
@@ -511,8 +515,9 @@ function renderPlatformSwitcherPills() {
     pill.className = `user-pill-btn ${user.id === STATE.activeHostId ? 'active' : ''}`;
     pill.id = `pill-${user.id}`;
     
+    const isUserAdmin = (user.is_admin === 1 || user.id === 'usr-adam');
     pill.innerHTML = `
-      <img src="${user.avatar || 'assets/avatar-p-default.svg'}" alt="${user.name}" class="user-pill-avatar">
+      <img src="${user.avatar || 'assets/avatar-p-default.svg'}" alt="${user.name}" class="user-pill-avatar ${isUserAdmin ? 'is-admin-avatar' : ''}">
       <span>${isYou ? 'My Platform (You)' : user.name}</span>
       ${isExample ? '<span style="font-size:0.65rem; color:#fbbf24; font-weight:800;">[AI]</span>' : ''}
     `;
@@ -561,7 +566,26 @@ async function loadPlatform(hostId, triggerAudioPrompt = false) {
       ? STATE.currentUser.banner
       : (user.banner || 'assets/maya-banner.jpg');
     document.getElementById('hostBannerImg').src = bannerUrl;
-    document.getElementById('hostAvatarImg').src = user.avatar || 'assets/avatar-p-default.svg';
+    
+    const hostAvatarImg = document.getElementById('hostAvatarImg');
+    const avatarMainFrame = document.querySelector('.avatar-main-frame');
+    const isProfileAdmin = (user.is_admin === 1 || user.id === 'usr-adam');
+    if (hostAvatarImg) {
+      hostAvatarImg.src = user.avatar || 'assets/avatar-p-default.svg';
+      if (isProfileAdmin) {
+        hostAvatarImg.classList.add('is-admin-avatar');
+      } else {
+        hostAvatarImg.classList.remove('is-admin-avatar');
+      }
+    }
+    if (avatarMainFrame) {
+      if (isProfileAdmin) {
+        avatarMainFrame.classList.add('is-admin-frame');
+      } else {
+        avatarMainFrame.classList.remove('is-admin-frame');
+      }
+    }
+
     document.getElementById('hostDisplayName').textContent = user.name;
     document.getElementById('hostHandle').textContent = user.handle;
     document.getElementById('hostBio').textContent = user.bio || 'Welcome to my space.';
@@ -635,11 +659,33 @@ async function loadPlatform(hostId, triggerAudioPrompt = false) {
 
     // Action buttons display
     const isSelf = STATE.currentUser && STATE.currentUser.id === user.id;
+    const isViewerAdmin = STATE.currentUser && (STATE.currentUser.is_admin === 1 || STATE.currentUser.id === 'usr-adam');
+
     document.getElementById('postToPlatformBtn').style.display = isSelf ? 'none' : 'inline-flex';
     document.getElementById('sendGratitudeTipBtn').style.display = isSelf ? 'none' : 'inline-flex';
     document.getElementById('editPlatformBtn').style.display = isSelf ? 'inline-flex' : 'none';
     const bannerOverlayBtn = document.getElementById('bannerEditOverlayBtn');
     if (bannerOverlayBtn) bannerOverlayBtn.style.display = isSelf ? 'inline-flex' : 'none';
+
+    // Admin Account Moderation Controls (STRICTLY HIDDEN if not an admin)
+    const adminEditBtn = document.getElementById('adminEditUserBtn');
+    const adminDeleteBtn = document.getElementById('adminDeleteUserBtn');
+    if (adminEditBtn) {
+      if (isViewerAdmin && !isSelf) {
+        adminEditBtn.classList.remove('hidden');
+        adminEditBtn.onclick = () => openAdminEditUserModal(user);
+      } else {
+        adminEditBtn.classList.add('hidden');
+      }
+    }
+    if (adminDeleteBtn) {
+      if (isViewerAdmin && !isSelf && user.id !== 'usr-adam') {
+        adminDeleteBtn.classList.remove('hidden');
+        adminDeleteBtn.onclick = () => deleteUserAccount(user.id, user.name);
+      } else {
+        adminDeleteBtn.classList.add('hidden');
+      }
+    }
     document.getElementById('composerTitle').textContent = isSelf ? 'Post a Thought to Your Platform' : `Post to ${user.name}'s Platform`;
     document.getElementById('postToPlatformBtnText').textContent = `Post to ${user.name}'s Platform`;
 
@@ -1586,7 +1632,8 @@ function renderPostsStream(dispatches = [], guestbook = []) {
     const currentUserId = STATE.currentUser ? STATE.currentUser.id : null;
     const isAuthor = currentUserId && (post.author_id === currentUserId || post.user_id === currentUserId);
     const isPlatformHost = currentUserId && (post.host_id === currentUserId);
-    const isAdmin = STATE.currentUser && STATE.currentUser.is_admin === 1;
+    const isAdmin = STATE.currentUser && (STATE.currentUser.is_admin === 1 || STATE.currentUser.id === 'usr-adam');
+    const isAuthorAdmin = (post.author_is_admin === 1 || post.author_id === 'usr-adam' || post.user_id === 'usr-adam');
 
     let actionButtonsHtml = '';
     if (isAuthor) {
@@ -1624,7 +1671,7 @@ function renderPostsStream(dispatches = [], guestbook = []) {
     card.innerHTML = `
       <div class="post-header">
         <div class="post-author-box">
-          <img src="${authorAvatar}" alt="${authorName}" class="post-avatar">
+          <img src="${authorAvatar}" alt="${authorName}" class="post-avatar ${isAuthorAdmin ? 'is-admin-avatar' : ''}">
           <div class="post-author-info">
             <span class="post-author-name">${authorName}</span>
             <span class="post-author-handle">${authorHandle}</span>
@@ -2655,10 +2702,12 @@ async function loadAdminDashboardData() {
       const isBot = u.bot_score >= 0.70 || u.is_banned === 1;
       const flags = JSON.parse(u.bot_flags || '[]');
 
+      const isUserAdmin = (u.is_admin === 1 || u.id === 'usr-adam');
+
       tr.innerHTML = `
         <td>
           <div class="table-user-cell">
-            <img src="${u.avatar || 'assets/avatar-p-default.svg'}" alt="${u.name}" class="table-user-avatar">
+            <img src="${u.avatar || 'assets/avatar-p-default.svg'}" alt="${u.name}" class="table-user-avatar ${isUserAdmin ? 'is-admin-avatar' : ''}">
             <div>
               <span class="table-user-name">${u.name}</span>
               <span class="table-user-handle">${u.handle}</span>
@@ -2683,13 +2732,19 @@ async function loadAdminDashboardData() {
           </button>
         </td>
         <td>
-          ${u.is_banned ? `
-            <span style="color:#f43f5e; font-weight:bold; font-size:0.8rem;">🚫 PERMA-BANNED</span>
-          ` : `
-            <button class="btn-instaban" onclick="instaBanTarget('${u.id}', '${u.registered_ip}')">
-              🔴 Insta-Ban IP &amp; Perma-Ban
-            </button>
-          `}
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${u.is_banned ? `
+              <span style="color:#f43f5e; font-weight:bold; font-size:0.8rem;">🚫 PERMA-BANNED</span>
+            ` : `
+              <button class="btn-instaban" onclick="instaBanTarget('${u.id}', '${u.registered_ip}')">
+                🔴 Insta-Ban IP &amp; Perma-Ban
+              </button>
+            `}
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-xs btn-outline" onclick="openAdminEditUserModalById('${u.id}')" title="Modify user account details">✏️ Edit Account</button>
+              ${u.id !== 'usr-adam' ? `<button type="button" class="btn btn-xs btn-danger" onclick="deleteUserAccount('${u.id}', '${escapeForAttr(u.name)}')" title="Permanently delete user account">🗑️ Delete Account</button>` : ''}
+            </div>
+          </div>
         </td>
       `;
       tbody.appendChild(tr);
@@ -2768,6 +2823,137 @@ window.unbanIpAddress = async function(ip) {
     showToast('Unban failed: ' + err.message, 'danger');
   }
 };
+
+// --- ADMIN ACCOUNT MODERATION & DELETION ---
+window.openAdminEditUserModal = function(user) {
+  if (!user) return;
+  const modal = document.getElementById('adminEditUserModal');
+  if (!modal) return;
+
+  document.getElementById('adminEditUserId').value = user.id || '';
+  document.getElementById('adminEditUserIdLabel').textContent = `${user.name} (${user.id})`;
+  document.getElementById('adminEditDisplayName').value = user.name || '';
+  document.getElementById('adminEditHandle').value = user.handle || '';
+  document.getElementById('adminEditEmail').value = user.email || '';
+  document.getElementById('adminEditLocation').value = user.location || '';
+  document.getElementById('adminEditBio').value = user.bio || '';
+  document.getElementById('adminEditMotto').value = user.motto || '';
+  document.getElementById('adminEditAvatarUrl').value = user.avatar || '';
+  document.getElementById('adminEditBannerUrl').value = user.banner || '';
+
+  const adminCheckbox = document.getElementById('adminEditIsAdmin');
+  if (adminCheckbox) {
+    adminCheckbox.checked = (user.is_admin === 1 || user.id === 'usr-adam');
+    adminCheckbox.disabled = (user.id === 'usr-adam');
+  }
+
+  const deleteBtn = document.getElementById('adminModalDeleteAccountBtn');
+  if (deleteBtn) {
+    if (user.id === 'usr-adam') {
+      deleteBtn.style.display = 'none';
+    } else {
+      deleteBtn.style.display = 'inline-flex';
+      deleteBtn.onclick = () => {
+        deleteUserAccount(user.id, user.name);
+      };
+    }
+  }
+
+  modal.showModal();
+};
+
+window.openAdminEditUserModalById = async function(userId) {
+  try {
+    const data = await apiRequest(`/api/users/${userId}`);
+    if (data && data.user) {
+      openAdminEditUserModal(data.user);
+    }
+  } catch (err) {
+    showToast('Failed to load user details: ' + err.message, 'danger');
+  }
+};
+
+window.closeAdminEditUserModal = function() {
+  document.getElementById('adminEditUserModal')?.close();
+};
+
+window.deleteUserAccount = async function(userId, userName = 'this user') {
+  if (!STATE.currentUser || (STATE.currentUser.is_admin !== 1 && STATE.currentUser.id !== 'usr-adam')) {
+    showToast('Admin privilege required to delete user accounts.', 'danger');
+    return;
+  }
+
+  if (userId === 'usr-adam') {
+    showToast('Cannot delete the root administrator account.', 'danger');
+    return;
+  }
+
+  const confirmMsg = `⚠️ DANGER: Are you sure you want to permanently delete user "${userName}" (${userId})?\n\nThis will permanently erase all their dispatches, notes, comments, friend connections, and hearth rooms.\n\nThis action CANNOT be undone. Proceed?`;
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const res = await apiRequest('/api/admin/users/delete', 'POST', {
+      user_id: userId,
+      target_user_id: userId,
+      admin_id: STATE.currentUser.id
+    });
+
+    showToast(res.message || `Account ${userName} permanently deleted.`, 'success');
+    closeAdminEditUserModal();
+
+    await refreshUsers();
+    await loadAdminDashboardData();
+
+    // If currently viewing the deleted user's platform, navigate back to Adam's platform
+    if (STATE.activeHostId === userId) {
+      switchToPlatformTab('usr-adam', false);
+    }
+  } catch (err) {
+    showToast('Failed to delete user account: ' + err.message, 'danger');
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const adminEditUserForm = document.getElementById('adminEditUserForm');
+  const closeAdminEditUserModalBtn = document.getElementById('closeAdminEditUserModalBtn');
+  const cancelAdminEditUserBtn = document.getElementById('cancelAdminEditUserBtn');
+
+  closeAdminEditUserModalBtn?.addEventListener('click', closeAdminEditUserModal);
+  cancelAdminEditUserBtn?.addEventListener('click', closeAdminEditUserModal);
+
+  adminEditUserForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const userId = document.getElementById('adminEditUserId').value;
+    if (!userId) return;
+
+    const payload = {
+      target_user_id: userId,
+      admin_id: STATE.currentUser?.id,
+      name: document.getElementById('adminEditDisplayName').value.trim(),
+      handle: document.getElementById('adminEditHandle').value.trim(),
+      email: document.getElementById('adminEditEmail').value.trim(),
+      location: document.getElementById('adminEditLocation').value.trim(),
+      bio: document.getElementById('adminEditBio').value.trim(),
+      motto: document.getElementById('adminEditMotto').value.trim(),
+      avatar: document.getElementById('adminEditAvatarUrl').value.trim() || undefined,
+      banner: document.getElementById('adminEditBannerUrl').value.trim() || undefined,
+      is_admin: document.getElementById('adminEditIsAdmin').checked ? 1 : 0
+    };
+
+    try {
+      const res = await apiRequest('/api/users/update', 'POST', payload);
+      showToast(res.message || 'User account updated successfully.', 'success');
+      closeAdminEditUserModal();
+      await refreshUsers();
+      await loadAdminDashboardData();
+      if (STATE.activeHostId === userId) {
+        loadPlatform(userId, false);
+      }
+    } catch (err) {
+      showToast('Failed to update user account: ' + err.message, 'danger');
+    }
+  });
+});
 
 // --- SEARCH ENGINE ---
 function initSearch() {
@@ -4620,7 +4806,8 @@ function renderTopicCardHtml(post) {
 
   const currentUserId = STATE.currentUser ? STATE.currentUser.id : null;
   const isAuthor = currentUserId && (post.author_id === currentUserId || post.user_id === currentUserId);
-  const isAdmin = STATE.currentUser && STATE.currentUser.is_admin === 1;
+  const isAdmin = STATE.currentUser && (STATE.currentUser.is_admin === 1 || STATE.currentUser.id === 'usr-adam');
+  const isAuthorAdmin = (post.author_is_admin === 1 || post.author_id === 'usr-adam' || post.user_id === 'usr-adam');
 
   let topicActionsHtml = '';
   if (isAuthor) {
@@ -4693,7 +4880,7 @@ function renderTopicCardHtml(post) {
           </div>
 
           <div class="topic-card-author-info" onclick="event.stopPropagation(); visitFriendPlatform('${post.author_id}')" title="Visit creator's platform" style="cursor:pointer;">
-            <img src="${post.author_avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(post.author_name || 'Creator')}" class="topic-author-avatar">
+            <img src="${post.author_avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(post.author_name || 'Creator')}" class="topic-author-avatar ${isAuthorAdmin ? 'is-admin-avatar' : ''}">
             <div>
               <div class="topic-author-name">${escapeHtml(post.author_name || 'Member')}</div>
               <div class="topic-author-handle">${escapeHtml(post.author_handle || '@member')} • ${formatTimeAgo(post.created_at || post.timestamp)}</div>
@@ -4838,13 +5025,16 @@ async function loadTopicComments(postId) {
     }
 
     const currentUserId = STATE.currentUser ? STATE.currentUser.id : null;
+    const isCurrentUserAdmin = STATE.currentUser && (STATE.currentUser.is_admin === 1 || STATE.currentUser.id === 'usr-adam');
 
     container.innerHTML = comments.map(c => {
-      const canDelete = currentUserId && (c.user_id === currentUserId || c.author_id === currentUserId);
+      const isAuthor = currentUserId && (c.user_id === currentUserId || c.author_id === currentUserId);
+      const canDelete = isAuthor || isCurrentUserAdmin;
+      const isCommentAuthorAdmin = (c.author_is_admin === 1 || c.author_id === 'usr-adam' || c.user_id === 'usr-adam');
       return `
         <div class="topic-comment-bubble" id="comment-${c.id}">
           <div class="comment-meta-row">
-            <img src="${c.author_avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(c.author_name)}" class="comment-avatar">
+            <img src="${c.author_avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(c.author_name)}" class="comment-avatar ${isCommentAuthorAdmin ? 'is-admin-avatar' : ''}">
             <span class="comment-author-name">${escapeHtml(c.author_name)}</span>
             <span class="comment-time">${formatTimeAgo(c.created_at)}</span>
             ${canDelete ? `<button class="comment-delete-btn" onclick="deleteComment('${c.id}', '${postId}')" title="Delete comment">✕ Delete</button>` : ''}
@@ -6209,7 +6399,11 @@ window.likePost = async function(postId) {
 window.deletePost = async function(postId) {
   if (!confirm('Are you sure you want to permanently delete this post? This action cannot be undone.')) return;
   try {
-    await apiRequest('/api/posts/delete', 'POST', { post_id: postId });
+    await apiRequest('/api/posts/delete', 'POST', {
+      post_id: postId,
+      user_id: STATE.currentUser?.id,
+      admin_id: STATE.currentUser?.id
+    });
     showToast('Post deleted successfully.', 'info');
     document.getElementById(`post-${postId}`)?.remove();
     document.getElementById(`topic-post-${postId}`)?.remove();
@@ -6277,7 +6471,11 @@ window.openChangeTopicModal = function(postId, currentTopic, currentSubtopic) {
 window.deleteComment = async function(commentId, postId) {
   if (!confirm('Are you sure you want to delete this comment?')) return;
   try {
-    await apiRequest('/api/posts/comments/delete', 'POST', { comment_id: commentId });
+    await apiRequest('/api/posts/comments/delete', 'POST', {
+      comment_id: commentId,
+      user_id: STATE.currentUser?.id,
+      admin_id: STATE.currentUser?.id
+    });
     showToast('Comment deleted.', 'info');
     if (postId) await loadTopicComments(postId);
   } catch (err) {
@@ -7448,15 +7646,24 @@ async function loadHearths() {
       return;
     }
 
+    const isCurrentUserAdmin = STATE.currentUser && (STATE.currentUser.is_admin === 1 || STATE.currentUser.id === 'usr-adam');
+    const currentUserId = STATE.currentUser ? STATE.currentUser.id : null;
+
     browseGrid.innerHTML = lounges.map(l => {
       const occupants = l.occupants || [];
-      const avatarsHtml = occupants.slice(0, 4).map(o => `
-        <img src="${o.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(o.name)}" class="hearth-preview-avatar">
-      `).join('');
+      const avatarsHtml = occupants.slice(0, 4).map(o => {
+        const isOccupantAdmin = (o.is_admin === 1 || o.is_admin === true || o.user_id === 'usr-adam' || o.id === 'usr-adam');
+        return `
+          <img src="${o.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(o.name)}" class="hearth-preview-avatar ${isOccupantAdmin ? 'is-admin-avatar' : ''}">
+        `;
+      }).join('');
 
       const isMusic = l.category === 'music';
       const catLabel = isMusic ? '🎵 Music Lounge' : (l.category ? `🔥 ${l.category.toUpperCase()}` : '🔥 Discussion');
       const activeTrack = l.active_track;
+
+      const isCreator = currentUserId && (l.created_by === currentUserId);
+      const canDeleteHearth = isCreator || isCurrentUserAdmin;
 
       return `
         <div class="hearth-card" id="hearth-card-${l.id}">
@@ -7483,9 +7690,16 @@ async function loadHearths() {
             <span class="hearth-occupants-count-label">${occupants.length} Gathered</span>
           </div>
 
-          <button type="button" class="btn btn-primary" onclick="joinHearthRoom('${l.id}')">
-            🔥 Pull Up a Chair
-          </button>
+          <div style="display: flex; gap: 8px; margin-top: auto;">
+            <button type="button" class="btn btn-primary" style="flex:1;" onclick="joinHearthRoom('${l.id}')">
+              🔥 Pull Up a Chair
+            </button>
+            ${canDeleteHearth ? `
+              <button type="button" class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteHearthRoom('${l.id}', '${escapeForAttr(l.name || l.title || 'Hearth')}')" title="Extinguish & Delete Hearth">
+                🗑️ Delete Hearth
+              </button>
+            ` : ''}
+          </div>
         </div>
       `;
     }).join('');
@@ -7690,16 +7904,30 @@ async function refreshActiveHearthRoom() {
 
     const occupants = lounge.occupants || [];
     const currentUserId = STATE.currentUser ? STATE.currentUser.id : null;
+    const isCurrentUserAdmin = STATE.currentUser && (STATE.currentUser.is_admin === 1 || STATE.currentUser.id === 'usr-adam');
+
+    // Extinguish / Delete Hearth button in active room header (Creator or Admin ONLY)
+    const deleteHearthBtn = document.getElementById('adminDeleteActiveHearthBtn');
+    if (deleteHearthBtn) {
+      const isCreator = currentUserId && (lounge.created_by === currentUserId);
+      if (isCreator || isCurrentUserAdmin) {
+        deleteHearthBtn.classList.remove('hidden');
+        deleteHearthBtn.onclick = () => deleteHearthRoom(lounge.id, lounge.name || lounge.title);
+      } else {
+        deleteHearthBtn.classList.add('hidden');
+      }
+    }
 
     circle.innerHTML = occupants.map(o => {
       const isMe = o.user_id === currentUserId || o.id === currentUserId;
       const isSpeaking = o.is_speaking || (isMe && isHearthSpeaking);
+      const isOccupantAdmin = (o.is_admin === 1 || o.is_admin === true || o.user_id === 'usr-adam' || o.id === 'usr-adam');
 
       return `
         <div class="hearth-occupant-seat ${isSpeaking ? 'speaking' : ''}" id="hearth-seat-${o.user_id || o.id}">
           <div class="hearth-occupant-avatar-wrap">
             <div class="hearth-occupant-speaking-ring"></div>
-            <img src="${o.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(o.name)}" class="hearth-occupant-avatar">
+            <img src="${o.avatar || 'assets/avatar-p-default.svg'}" alt="${escapeHtml(o.name)}" class="hearth-occupant-avatar ${isOccupantAdmin ? 'is-admin-avatar' : ''}">
           </div>
           <span class="hearth-occupant-name">${escapeHtml(o.name)}${isMe ? ' (You)' : ''} ${isSpeaking ? '🎙️' : ''}</span>
         </div>
@@ -7709,6 +7937,28 @@ async function refreshActiveHearthRoom() {
     console.warn('Error refreshing active hearth:', err);
   }
 }
+
+async function deleteHearthRoom(hearthId, hearthTitle = 'this hearth') {
+  if (!confirm(`Are you sure you want to extinguish and permanently delete "${hearthTitle}"? This will close the hearth for everyone.`)) {
+    return;
+  }
+  try {
+    const res = await apiRequest('/api/lounges/delete', 'POST', {
+      lounge_id: hearthId,
+      hearth_id: hearthId,
+      user_id: STATE.currentUser?.id,
+      admin_id: STATE.currentUser?.id
+    });
+    showToast(res.message || 'Hearth extinguished.', 'success');
+    if (STATE.activeLoungeId === hearthId) {
+      leaveHearthRoom();
+    }
+    await loadHearths();
+  } catch (err) {
+    showToast('Failed to extinguish hearth: ' + err.message, 'danger');
+  }
+}
+window.deleteHearthRoom = deleteHearthRoom;
 
 function startHearthsPolling() {
   stopHearthsPolling();

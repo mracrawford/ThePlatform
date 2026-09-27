@@ -279,6 +279,11 @@ def calculate_distance_and_bearing(lat1, lon1, lat2, lon2):
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout = 30000")
+    except:
+        pass
     return conn
 
 def init_db():
@@ -644,8 +649,21 @@ def init_db():
 
     conn.commit()
 
-    # Seed AI / Example Stand-In Accounts if not existing
-    seed_example_data(cursor, conn)
+    # Create system_meta table to track system state
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS system_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    ''')
+
+    # Seed AI / Example Stand-In Accounts ONLY once on first-ever database creation
+    cursor.execute("SELECT value FROM system_meta WHERE key = 'seed_completed'")
+    if not cursor.fetchone():
+        seed_example_data(cursor, conn)
+        cursor.execute("INSERT OR REPLACE INTO system_meta (key, value) VALUES ('seed_completed', '1')")
+        conn.commit()
+
     conn.close()
 
 def seed_example_data(cursor, conn):
@@ -970,7 +988,7 @@ def resolve_user(cur, *identifiers):
         """, (ident, ident, handle_with_at, handle_without_at, ident, f"usr-{ident}"))
         row = cur.fetchone()
         if row:
-            return row
+            return dict(row)
 
     # Legacy session recovery fallback:
     # If any identifier was the previous Adam session UUID or matches Adam
@@ -979,7 +997,7 @@ def resolve_user(cur, *identifiers):
             cur.execute("SELECT * FROM users WHERE id = 'usr-adam' OR email = 'mracrawford@gmail.com' OR handle = '@adam'")
             res = cur.fetchone()
             if res:
-                return res
+                return dict(res)
 
     return None
 
@@ -1073,6 +1091,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
     def is_current_user_admin(self, user_id):
         if not user_id:
             return False
+        if user_id == 'usr-adam':
+            return True
         conn = get_db()
         cur = conn.cursor()
         cur.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,))
@@ -1495,6 +1515,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             cur.execute("""
             SELECT p.*,
                    u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto,
+                   u.is_admin as author_is_admin,
                    (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) as comments_count
             FROM posts p JOIN users u ON p.author_id = u.id
             WHERE p.host_id = ? AND p.is_guestbook = 0
@@ -1515,6 +1536,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             cur.execute("""
             SELECT p.*,
                    u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto,
+                   u.is_admin as author_is_admin,
                    (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) as comments_count
             FROM posts p JOIN users u ON p.author_id = u.id
             WHERE p.host_id = ? AND p.is_guestbook = 1
@@ -1735,6 +1757,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                    u.handle as author_handle,
                    u.avatar as author_avatar,
                    u.motto as author_motto,
+                   u.is_admin as author_is_admin,
                    (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) as comments_count,
                    EXISTS(SELECT 1 FROM saved_posts sp WHERE sp.post_id = p.id AND sp.user_id = ?) as is_saved
             FROM posts p
@@ -1827,7 +1850,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
         if comments_match:
             post_id = comments_match.group(1)
             cur.execute("""
-            SELECT pc.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto
+            SELECT pc.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto, u.is_admin as author_is_admin
             FROM post_comments pc
             JOIN users u ON pc.author_id = u.id
             WHERE pc.post_id = ?
@@ -1848,6 +1871,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 uid = u['id'] if u else None
                 cur.execute("""
                 SELECT p.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto,
+                       u.is_admin as author_is_admin,
                        (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) as comments_count,
                        (SELECT COUNT(*) FROM saved_posts WHERE post_id = p.id AND user_id = ?) as is_saved
                 FROM posts p
@@ -1881,6 +1905,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                    u.handle as author_handle,
                    u.avatar as author_avatar,
                    u.motto as author_motto,
+                   u.is_admin as author_is_admin,
                    (p.likes * 2 + COALESCE(p.views, 0)) as engagement_score,
                    (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) as comments_count,
                    1 as is_saved,
@@ -2410,6 +2435,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 "name": user['name'],
                 "handle": user['handle'],
                 "avatar": user['avatar'],
+                "is_admin": 1 if (user.get('is_admin') == 1 or user['id'] == 'usr-adam') else 0,
                 "is_speaking": False,
                 "is_muted": True,
                 "joined_at": int(time.time()),
@@ -2465,6 +2491,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 "name": user['name'],
                 "handle": user['handle'],
                 "avatar": user['avatar'],
+                "is_admin": 1 if (user.get('is_admin') == 1 or user['id'] == 'usr-adam') else 0,
                 "is_speaking": False,
                 "is_muted": True,
                 "joined_at": int(time.time()),
@@ -2515,6 +2542,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 "name": user['name'],
                 "handle": user['handle'],
                 "avatar": user['avatar'],
+                "is_admin": 1 if (user.get('is_admin') == 1 or user['id'] == 'usr-adam') else 0,
                 "is_speaking": False,
                 "is_muted": True,
                 "joined_at": int(time.time()),
@@ -2690,6 +2718,40 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 conn.close()
                 self.send_json(403, {"error": f"Only {current_track.get('sender_name')} or the hearth creator can stop this track."})
                 return
+
+        # 0h. POST /api/lounges/delete - Extinguish/Delete a Hearth Room (Creator or Admin Only)
+        if path == '/api/lounges/delete':
+            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'), data.get('admin_id'))
+            if not caller:
+                conn.close()
+                self.send_json(401, {"error": "Authentication required."})
+                return
+
+            lounge_id = data.get('lounge_id') or data.get('hearth_id')
+            if not lounge_id or lounge_id not in FIRESIDE_HEARTHS:
+                conn.close()
+                self.send_json(404, {"error": "Hearth room not found."})
+                return
+
+            room = FIRESIDE_HEARTHS[lounge_id]
+            is_creator = (room.get('created_by') == caller['id'])
+            is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
+
+            if not (is_creator or is_admin):
+                conn.close()
+                self.send_json(403, {"error": "Permission denied: Only the hearth creator or an admin can delete this hearth."})
+                return
+
+            deleted_name = room.get('name') or room.get('title') or lounge_id
+            del FIRESIDE_HEARTHS[lounge_id]
+            conn.close()
+
+            self.send_json(200, {
+                "success": True,
+                "message": f"Hearth '{deleted_name}' extinguished and deleted.",
+                "deleted_lounge_id": lounge_id
+            })
+            return
 
         # 0. POST /api/login - Secure Account Authentication
         if path == '/api/login':
@@ -3029,22 +3091,38 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             })
             return
 
-        # 1b. POST /api/users/update - Edit Platform / Profile (Foolproof User Resolution)
+        # 1b. POST /api/users/update - Edit Platform / Profile (Author or Admin Only)
         if path == '/api/users/update':
-            current = resolve_user(
+            caller = resolve_user(
                 cur,
-                data.get('user_id'),
-                data.get('id'),
                 self.get_current_user_id(),
-                data.get('email'),
-                data.get('handle')
+                data.get('admin_id'),
+                data.get('caller_id'),
+                data.get('user_id'),
+                data.get('id')
             )
-            if not current:
+            if not caller:
                 conn.close()
                 self.send_json(401, {"error": "Authentication required. User not found."})
                 return
 
-            user_id = current['id']
+            is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
+
+            # Determine which user account is being modified
+            target_id = data.get('target_user_id') or data.get('target_id')
+            if target_id and target_id != caller['id']:
+                if not is_admin:
+                    conn.close()
+                    self.send_json(403, {"error": "Permission denied: Only administrators can modify another user's profile."})
+                    return
+                target = resolve_user(cur, target_id)
+                if not target:
+                    conn.close()
+                    self.send_json(404, {"error": "Target user to modify not found."})
+                    return
+                user_id = target['id']
+            else:
+                user_id = caller['id']
 
             name = data.get('name')
             bio = data.get('bio')
@@ -3066,6 +3144,14 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             zodiac_sign = compute_zodiac_sign(dob) if dob else None
             motto = sanitize_motto(data.get('motto')) if 'motto' in data else None
 
+            # Admin-only fields: handle, email, is_admin
+            new_handle = data.get('handle').strip() if (is_admin and data.get('handle')) else None
+            new_email = data.get('email').strip().lower() if (is_admin and data.get('email')) else None
+            new_is_admin = None
+            if is_admin and 'is_admin' in data:
+                val = data.get('is_admin')
+                new_is_admin = 1 if (val is True or val == 1 or val == '1' or val == 'true') else 0
+
             # Geocode updated location strictly from user input (Zero GPS Tracking)
             lat = None
             lon = None
@@ -3077,6 +3163,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
             cur.execute("""
             UPDATE users SET
+                handle = COALESCE(?, handle),
+                email = COALESCE(?, email),
+                is_admin = CASE WHEN ? IS NOT NULL THEN ? ELSE is_admin END,
                 name = COALESCE(?, name),
                 bio = COALESCE(?, bio),
                 location = COALESCE(?, location),
@@ -3099,6 +3188,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 playlist = CASE WHEN ? IS NOT NULL THEN ? ELSE playlist END
             WHERE id = ?
             """, (
+                new_handle, new_email,
+                new_is_admin, new_is_admin,
                 name, bio, location,
                 lat, lat, lon, lon, fmt_addr, fmt_addr,
                 privacy, aesthetic_name,
@@ -3114,6 +3205,13 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 json.dumps(playlist) if playlist is not None else None,
                 user_id
             ))
+
+            if is_admin and user_id != caller['id']:
+                now = int(time.time())
+                cur.execute("""
+                INSERT INTO audit_logs (id, admin_id, action, target_id, details, created_at)
+                VALUES (?, ?, 'ADMIN_EDIT_USER', ?, ?, ?)
+                """, ('log-' + uuid.uuid4().hex[:8], caller['id'], user_id, f"Admin updated account details for user {user_id}", now))
 
             conn.commit()
             cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -3238,7 +3336,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 2. POST /api/posts - Create Dispatch or Guestbook Note with Sub-Topic Scraping
         if path == '/api/posts':
-            author_ident = self.get_current_user_id() or data.get('author_id')
+            author_ident = self.get_current_user_id() or data.get('author_id') or data.get('user_id')
             author = resolve_user(cur, author_ident)
             if not author:
                 conn.close()
@@ -3564,6 +3662,71 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             conn.commit()
             conn.close()
             self.send_json(200, {"message": f"IP {ip_to_unban} has been unbanned."})
+            return
+
+        # 6b. POST /api/admin/users/delete - Permanently Delete User Account (ADMIN ONLY)
+        if path == '/api/admin/users/delete':
+            caller = resolve_user(cur, self.get_current_user_id(), data.get('admin_id'), data.get('caller_id'), data.get('user_id'))
+            is_admin = bool(caller and (caller.get('is_admin') == 1 or caller['id'] == 'usr-adam'))
+            if not is_admin:
+                conn.close()
+                self.send_json(403, {"error": "Admin privilege required."})
+                return
+
+            target_user_id = data.get('target_user_id') or data.get('user_id')
+            if not target_user_id:
+                conn.close()
+                self.send_json(400, {"error": "Missing user_id to delete."})
+                return
+
+            if target_user_id == 'usr-adam':
+                conn.close()
+                self.send_json(400, {"error": "Primary root administrator account (Adam) cannot be deleted."})
+                return
+
+            cur.execute("SELECT id, name, handle, email FROM users WHERE id = ?", (target_user_id,))
+            target = cur.fetchone()
+            if not target:
+                conn.close()
+                self.send_json(404, {"error": "User account not found."})
+                return
+
+            now = int(time.time())
+            admin_id = caller['id']
+            target_name = target['name']
+
+            # Cascade cleanup across all tables
+            cur.execute("DELETE FROM post_comments WHERE author_id = ? OR post_id IN (SELECT id FROM posts WHERE author_id = ?)", (target_user_id, target_user_id))
+            cur.execute("DELETE FROM saved_posts WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE author_id = ?)", (target_user_id, target_user_id))
+            cur.execute("DELETE FROM post_flags WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE author_id = ?)", (target_user_id, target_user_id))
+            cur.execute("DELETE FROM posts WHERE author_id = ? OR host_id = ?", (target_user_id, target_user_id))
+            cur.execute("DELETE FROM friendships WHERE user_id = ? OR friend_id = ?", (target_user_id, target_user_id))
+            cur.execute("DELETE FROM direct_messages WHERE sender_id = ? OR recipient_id = ?", (target_user_id, target_user_id))
+            cur.execute("DELETE FROM notifications WHERE user_id = ? OR sender_id = ?", (target_user_id, target_user_id))
+            cur.execute("DELETE FROM commons_items WHERE author_id = ?", (target_user_id,))
+            cur.execute("DELETE FROM collective_members WHERE user_id = ?", (target_user_id,))
+            cur.execute("DELETE FROM user_public_keys WHERE user_id = ?", (target_user_id,))
+            cur.execute("DELETE FROM password_resets WHERE user_id = ?", (target_user_id,))
+            cur.execute("DELETE FROM users WHERE id = ?", (target_user_id,))
+
+            # Remove from any active Fireside hearths
+            for r in FIRESIDE_HEARTHS.values():
+                r['occupants'].pop(target_user_id, None)
+
+            # Audit log
+            cur.execute("""
+            INSERT INTO audit_logs (id, admin_id, action, target_id, details, created_at)
+            VALUES (?, ?, 'DELETE_USER_ACCOUNT', ?, ?, ?)
+            """, ('log-' + uuid.uuid4().hex[:8], admin_id, target_user_id, f"Admin deleted user {target_name} ({target['handle']})", now))
+
+            conn.commit()
+            conn.close()
+
+            self.send_json(200, {
+                "success": True,
+                "message": f"Account '{target_name}' and all associated data permanently deleted.",
+                "deleted_user_id": target_user_id
+            })
             return
 
         # 7. POST /api/friends/request - Send Friend Request
@@ -3974,7 +4137,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 self.send_json(404, {"error": "Post not found."})
                 return
 
-            if post['author_id'] != caller['id'] and caller['is_admin'] != 1:
+            is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
+            if post['author_id'] != caller['id'] and not is_admin:
                 conn.close()
                 self.send_json(403, {"error": "Permission denied: Only the author or an admin can edit this post."})
                 return
@@ -4013,7 +4177,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 17. POST /api/posts/delete - Delete a post (Author, Platform Host, or Admin)
         if path == '/api/posts/delete':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'), data.get('admin_id'))
             if not caller:
                 conn.close()
                 self.send_json(401, {"error": "Authentication required to delete post."})
@@ -4029,7 +4193,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
             is_author = (post['author_id'] == caller['id'])
             is_host = (post['host_id'] == caller['id'])
-            is_admin = (caller['is_admin'] == 1)
+            is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
 
             if not (is_author or is_host or is_admin):
                 conn.close()
@@ -4055,7 +4219,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 18. POST /api/posts/comments/delete - Delete comment (Author, Post Host, or Admin)
         if path in ['/api/posts/comments/delete', '/api/posts/comment/delete']:
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'), data.get('admin_id'))
             if not caller:
                 conn.close()
                 self.send_json(401, {"error": "Authentication required."})
@@ -4071,7 +4235,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
             is_author = (comment['author_id'] == caller['id'])
             is_host = (comment['host_id'] == caller['id'])
-            is_admin = (caller['is_admin'] == 1)
+            is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
 
             if not (is_author or is_host or is_admin):
                 conn.close()
@@ -4171,7 +4335,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 self.send_json(404, {"error": "Post not found."})
                 return
 
-            if post['author_id'] != caller['id'] and caller['is_admin'] != 1:
+            is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
+            if post['author_id'] != caller['id'] and not is_admin:
                 conn.close()
                 self.send_json(403, {"error": "Permission denied: Only the original author or an admin can change the topic."})
                 return

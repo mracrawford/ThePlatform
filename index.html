@@ -417,6 +417,15 @@
                 <span>✏️ Edit Profile</span>
               </button>
 
+              <!-- Admin Account Controls (STRICTLY HIDDEN for Regular Users) -->
+              <button id="adminEditUserBtn" class="btn btn-warning hidden" title="Admin: Modify user account details and permissions">
+                <span>🛡️ Modify User</span>
+              </button>
+
+              <button id="adminDeleteUserBtn" class="btn btn-danger hidden" title="Admin: Permanently delete this user account">
+                <span>🛡️ Delete Account</span>
+              </button>
+
               <button id="postToPlatformBtn" class="btn btn-primary" title="Leave a post on this creator's platform">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 <span id="postToPlatformBtnText">Post to Platform</span>
@@ -1068,8 +1077,10 @@
                 <p id="activeHearthTopic" class="hearth-room-topic">Human-first technology, mutual aid &amp; ethics</p>
               </div>
             </div>
-            <button type="button" id="leaveHearthBtn" class="btn btn-danger btn-sm">Leave Hearth</button>
-          </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button type="button" id="adminDeleteActiveHearthBtn" class="btn btn-warning btn-sm hidden" title="Extinguish & Delete Hearth">🗑️ Extinguish Hearth</button>
+              <button type="button" id="leaveHearthBtn" class="btn btn-danger btn-sm">Leave Hearth</button>
+            </div>
 
           <!-- Circular Seating Stage for Participants -->
           <div class="hearth-campfire-container">
@@ -2932,6 +2943,88 @@
           <button type="submit" id="submitCreateHearthBtn" class="btn btn-primary">
             <span>🔥 Light the Hearth</span>
           </button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL: ADMIN EDIT USER ACCOUNT (ADMIN ONLY) -->
+  <dialog id="adminEditUserModal" class="system-modal" aria-labelledby="adminEditUserModalTitle">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon-badge" style="width:40px;height:40px;font-size:1.3rem;background:linear-gradient(135deg,#c084fc,#f59e0b);">🛡️</span>
+          <div>
+            <h3 id="adminEditUserModalTitle" class="modal-title">Admin: Modify User Account</h3>
+            <p class="modal-subtitle">Governance control &bull; Target ID: <strong id="adminEditUserIdLabel" style="color:var(--theme-primary);"></strong></p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" id="closeAdminEditUserModalBtn" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="adminEditUserForm" class="modal-form" onsubmit="return false;">
+        <input type="hidden" id="adminEditUserId">
+
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label for="adminEditDisplayName">Display Name *</label>
+            <input type="text" id="adminEditDisplayName" required class="form-input">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label for="adminEditHandle">Handle (@username) *</label>
+            <input type="text" id="adminEditHandle" required class="form-input">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label for="adminEditEmail">Account Email</label>
+            <input type="email" id="adminEditEmail" class="form-input">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label for="adminEditLocation">Location (Zero GPS Tracking)</label>
+            <input type="text" id="adminEditLocation" class="form-input" placeholder="e.g. Los Banos, CA">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="adminEditBio">Bio</label>
+          <textarea id="adminEditBio" rows="2" class="form-textarea"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="adminEditMotto">Personal Motto / Statement</label>
+          <input type="text" id="adminEditMotto" class="form-input" maxlength="160">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label for="adminEditAvatarUrl">Avatar Image URL</label>
+            <input type="text" id="adminEditAvatarUrl" class="form-input" placeholder="assets/avatar-p-default.svg">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label for="adminEditBannerUrl">Banner Image URL</label>
+            <input type="text" id="adminEditBannerUrl" class="form-input" placeholder="assets/maya-banner.jpg">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 10px; padding: 12px; background: rgba(192, 132, 252, 0.08); border: 1px solid rgba(192, 132, 252, 0.25); border-radius: var(--radius-md);">
+          <label class="checkbox-container" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="adminEditIsAdmin">
+            <span class="checkbox-label-text" style="font-weight: 700; color: #c084fc;">⭐ Grant Administrator Status (Allows post/hearth/account governance)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 24px; display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" id="adminModalDeleteAccountBtn" class="btn btn-danger">
+            <span>🗑️ Delete This Account</span>
+          </button>
+          <div style="display:flex; gap:10px;">
+            <button type="button" id="cancelAdminEditUserBtn" class="btn btn-secondary">Cancel</button>
+            <button type="submit" id="saveAdminEditUserBtn" class="btn btn-primary">
+              <span>💾 Save User Modifications</span>
+            </button>
+          </div>
         </div>
       </form>
     </div>

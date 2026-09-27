@@ -10410,6 +10410,67 @@ body.theater-blur-active > *:not(.video-theater-modal) {
   color: #38bdf8;
 }
 
+/* ==========================================================================
+   ADMIN PROFILE PICTURE SPECIAL GLOW & HALO
+   ========================================================================== */
+@keyframes adminHaloPulse {
+  0% {
+    box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.9), 0 0 12px rgba(168, 85, 247, 0.8), 0 0 22px rgba(245, 158, 11, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.95), 0 0 18px rgba(192, 132, 252, 1), 0 0 32px rgba(234, 179, 8, 0.75);
+  }
+  100% {
+    box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.9), 0 0 12px rgba(168, 85, 247, 0.8), 0 0 22px rgba(245, 158, 11, 0.5);
+  }
+}
+
+.is-admin-avatar {
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.9), 0 0 12px rgba(168, 85, 247, 0.8), 0 0 22px rgba(245, 158, 11, 0.5) !important;
+  animation: adminHaloPulse 3.5s infinite ease-in-out !important;
+  position: relative;
+  border-color: #c084fc !important;
+}
+
+.avatar-main-frame.is-admin-frame {
+  background: linear-gradient(135deg, #c084fc 0%, #f59e0b 50%, #ec4899 100%) !important;
+  box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.8), 0 8px 32px rgba(0, 0, 0, 0.8), 0 0 30px rgba(192, 132, 252, 0.7), 0 0 45px rgba(245, 158, 11, 0.5) !important;
+  animation: adminHaloPulse 3.5s infinite ease-in-out !important;
+}
+
+.avatar-main-frame.is-admin-frame .profile-avatar {
+  border-color: #18181b !important;
+  box-shadow: inset 0 0 8px rgba(192, 132, 252, 0.4);
+}
+
+.user-chip-avatar.is-admin-avatar,
+.user-pill-avatar.is-admin-avatar {
+  box-shadow: 0 0 0 2px #c084fc, 0 0 10px rgba(192, 132, 252, 0.8), 0 0 18px rgba(245, 158, 11, 0.5) !important;
+}
+
+.post-avatar.is-admin-avatar,
+.comment-avatar.is-admin-avatar,
+.topic-author-avatar.is-admin-avatar,
+.hearth-preview-avatar.is-admin-avatar,
+.hearth-occupant-avatar.is-admin-avatar,
+.hearth-occupant-seat .hearth-occupant-avatar-wrap img.is-admin-avatar,
+.table-user-avatar.is-admin-avatar {
+  box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.85), 0 0 8px rgba(168, 85, 247, 0.75), 0 0 16px rgba(245, 158, 11, 0.4) !important;
+  animation: adminHaloPulse 4s infinite ease-in-out !important;
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  color: #fff;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.btn-warning:hover {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+}
+
 
 
 

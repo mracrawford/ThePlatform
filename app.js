@@ -455,7 +455,7 @@ function initTopNavHorizontalScroll() {
 
   nav.addEventListener('mousedown', (e) => {
     // Prevent dragging when clicking interactive controls
-    if (e.target.closest('button, input, a, select, textarea, .brand-link, .current-user-chip, .search-box')) return;
+    if (e.target.closest('button, input, a, select, textarea, .brand-link, .current-user-chip, .user-chip-wrapper, #currentUserChip, #userDropdownMenu, .search-box')) return;
     isDown = true;
     startX = e.pageX - nav.offsetLeft;
     scrollLeft = nav.scrollLeft;
@@ -3214,18 +3214,22 @@ function initUserDropdownMenu() {
   const logoutBtn = document.getElementById('menuLogoutBtn');
 
   function positionUserDropdown() {
-    if (!chip || !menu || menu.classList.contains('hidden')) return;
+    if (!chip || !menu) return;
+    if (menu.classList.contains('hidden')) return;
     const rect = chip.getBoundingClientRect();
     menu.style.position = 'fixed';
-    menu.style.top = `${Math.round(rect.bottom + 8)}px`;
-    menu.style.zIndex = '99999';
+    menu.style.zIndex = '100000';
 
     if (window.innerWidth <= 480) {
+      const topCoord = (rect && rect.bottom > 0) ? Math.max(50, Math.round(rect.bottom + 6)) : 56;
+      menu.style.top = `${topCoord}px`;
       menu.style.right = '8px';
       menu.style.left = 'auto';
       menu.style.maxWidth = 'calc(100vw - 16px)';
     } else {
-      const rightDist = Math.max(12, Math.round(window.innerWidth - rect.right));
+      const computedTop = (rect && rect.bottom > 0) ? Math.max(54, Math.round(rect.bottom + 8)) : 58;
+      const rightDist = (rect && rect.right > 0) ? Math.max(12, Math.round(window.innerWidth - rect.right)) : 16;
+      menu.style.top = `${computedTop}px`;
       menu.style.right = `${rightDist}px`;
       menu.style.left = 'auto';
       menu.style.maxWidth = '280px';
@@ -3237,18 +3241,29 @@ function initUserDropdownMenu() {
   window.addEventListener('scroll', positionUserDropdown, { passive: true });
 
   if (chip && menu) {
-    chip.addEventListener('click', (e) => {
+    const handleChipToggle = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       document.getElementById('notificationsDropdown')?.classList.add('hidden');
-      const willOpen = menu.classList.contains('hidden');
-      menu.classList.toggle('hidden');
-      if (willOpen) {
+      const isCurrentlyHidden = menu.classList.contains('hidden');
+      if (isCurrentlyHidden) {
+        menu.classList.remove('hidden');
         positionUserDropdown();
+      } else {
+        menu.classList.add('hidden');
       }
-    });
+    };
+
+    chip.addEventListener('click', handleChipToggle);
 
     document.addEventListener('click', (e) => {
       if (!e.target.closest('#currentUserChip') && !e.target.closest('#userDropdownMenu')) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !menu.classList.contains('hidden')) {
         menu.classList.add('hidden');
       }
     });

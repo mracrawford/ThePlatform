@@ -88,6 +88,12 @@ LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 6
 LOGIN_LOCKOUT_WINDOW = 300  # 5 minutes (300 seconds)
 
+# Persistent rate limit configuration for Registration & Password Reset
+MAX_REGISTER_ATTEMPTS = 5
+REGISTER_WINDOW = 3600  # 1 hour (3600 seconds)
+MAX_RESET_ATTEMPTS = 5
+RESET_WINDOW = 900      # 15 minutes (900 seconds)
+
 # Cryptographic Session & PBKDF2 Configuration
 SESSION_COOKIE_NAME = 'theplatform_session'
 SESSION_DURATION = 86400 * 30  # 30 days
@@ -356,6 +362,55 @@ def record_login_attempt(client_ip, success):
     conn.commit()
     conn.close()
 
+def check_action_rate_limit(action, identifier, max_attempts, window_sec):
+    """
+    Generic persistent SQLite-backed rate limiter for sensitive actions (e.g. 'register', 'reset').
+    Keyed by f"{action}:{identifier}". Returns (allowed, wait_seconds).
+    """
+    key = f"{action}:{identifier}"
+    conn = get_db()
+    cur = conn.cursor()
+    now = int(time.time())
+    cur.execute("SELECT attempts, last_attempt, locked_until FROM action_rate_limits WHERE key = ?", (key,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return True, 0
+    locked_until = row['locked_until'] or 0
+    if locked_until > now:
+        wait_sec = locked_until - now
+        conn.close()
+        return False, wait_sec
+    if now - row['last_attempt'] > window_sec:
+        cur.execute("UPDATE action_rate_limits SET attempts = 0, locked_until = 0 WHERE key = ?", (key,))
+        conn.commit()
+    conn.close()
+    return True, 0
+
+def record_action_attempt(action, identifier, max_attempts, window_sec, success=False):
+    """
+    Records an action attempt (or resets on success if applicable).
+    """
+    key = f"{action}:{identifier}"
+    conn = get_db()
+    cur = conn.cursor()
+    now = int(time.time())
+    if success:
+        cur.execute("DELETE FROM action_rate_limits WHERE key = ?", (key,))
+        conn.commit()
+        conn.close()
+        return
+    cur.execute("SELECT attempts, last_attempt FROM action_rate_limits WHERE key = ?", (key,))
+    row = cur.fetchone()
+    if not row:
+        cur.execute("INSERT INTO action_rate_limits (key, attempts, last_attempt, locked_until) VALUES (?, 1, ?, 0)", (key, now))
+    else:
+        new_attempts = 1 if (now - row['last_attempt'] > window_sec) else (row['attempts'] + 1)
+        locked_until = (now + window_sec) if new_attempts >= max_attempts else 0
+        cur.execute("UPDATE action_rate_limits SET attempts = ?, last_attempt = ?, locked_until = ? WHERE key = ?", (new_attempts, now, locked_until, key))
+    conn.commit()
+    conn.close()
+
 def create_user_session(user_id, client_ip, user_agent=""):
     """
     Generates a cryptographically secure 256-bit session token,
@@ -366,6 +421,8 @@ def create_user_session(user_id, client_ip, user_agent=""):
     expires_at = now + SESSION_DURATION
     conn = get_db()
     cur = conn.cursor()
+    # Opportunistic expired session cleanup to prevent database bloat
+    cur.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
     cur.execute("""
     INSERT INTO sessions (token, user_id, created_at, expires_at, ip, user_agent)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -771,6 +828,19 @@ def init_db():
     )
     ''')
 
+    # Persistent Action Rate Limits Table (Registration & Password Reset)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS action_rate_limits (
+        key TEXT PRIMARY KEY,
+        attempts INTEGER DEFAULT 0,
+        last_attempt INTEGER NOT NULL,
+        locked_until INTEGER DEFAULT 0
+    )
+    ''')
+
+    # Prune expired sessions on server initialization
+    cursor.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time()),))
+
     conn.commit()
 
     # Create system_meta table to track system state
@@ -1124,15 +1194,6 @@ def resolve_user(cur, *identifiers):
         if row:
             return dict(row)
 
-    # Legacy session recovery fallback:
-    # If any identifier was the previous Adam session UUID or matches Adam
-    for identifier in identifiers:
-        if identifier and any(k in str(identifier).lower() for k in ['e78b019029', 'adam', 'crawford']):
-            cur.execute("SELECT * FROM users WHERE id = 'usr-adam' OR email = 'mracrawford@gmail.com' OR handle = '@adam'")
-            res = cur.fetchone()
-            if res:
-                return dict(res)
-
     return None
 
 # --- BOT DETECTION ENGINE ---
@@ -1291,6 +1352,43 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
         conn.close()
         return bool(row and row['is_admin'] == 1)
 
+    def require_auth(self, conn=None):
+        """
+        Strictly enforces that the caller possesses an active, valid session token.
+        If not authenticated, sends 401 Unauthorized, closes conn if provided, and returns None.
+        Returns the authenticated user dict.
+        """
+        user_id = self.get_current_user_id()
+        if not user_id:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self.send_json(401, {"error": "Authentication required. Please log in."})
+            return None
+        close_conn = False
+        if conn is None:
+            conn = get_db()
+            close_conn = True
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = cur.fetchone()
+        if close_conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if not row:
+            if conn and not close_conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self.send_json(401, {"error": "User session invalid or user record not found."})
+            return None
+        return dict(row)
+
     def end_headers(self):
         # Universal defensive security headers on all responses (static and API)
         self.send_header('X-Content-Type-Options', 'nosniff')
@@ -1398,18 +1496,10 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             return
         # 00. GET /api/auth/me - Verify active session and return authenticated user
         if path == '/api/auth/me':
-            auth_uid = self.get_current_user_id()
-            if not auth_uid:
-                conn.close()
-                self.send_json(401, {"authenticated": False, "error": "Not authenticated"})
+            user = self.require_auth(conn)
+            if not user:
                 return
-            cur.execute("SELECT * FROM users WHERE id = ?", (auth_uid,))
-            user_row = cur.fetchone()
-            if not user_row:
-                conn.close()
-                self.send_json(404, {"authenticated": False, "error": "User record not found"})
-                return
-            ud = dict(user_row)
+            ud = dict(user)
             ud.pop('password_hash', None)
             ud.pop('password_salt', None)
             ud.pop('registered_ip', None)
@@ -1905,11 +1995,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 5. GET /api/friends - Current user's friends & friend requests
         if path == '/api/friends':
-            current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-            u = resolve_user(cur, current_id)
+            u = self.require_auth(conn)
             if not u:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             uid = u['id']
 
@@ -1977,7 +2064,7 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 7. GET /api/topics - Curated / Trending Topics & Passions Feed (Reddit-Style Social Ranking)
         if path == '/api/topics':
-            current_user_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
+            current_user_id = self.get_current_user_id()
             interest_filter = query.get('interest', [None])[0]
             subtopic_filter = query.get('subtopic', [None])[0]
             saved_only = (query.get('saved_only', ['false'])[0].lower() in ['1', 'true', 'yes'])
@@ -2098,8 +2185,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
         if post_match:
             pid = post_match.group(1)
             if pid not in ['saved', 'user-activity']:
-                current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-                u = resolve_user(cur, current_id)
+                current_id = self.get_current_user_id()
+                u = resolve_user(cur, current_id) if current_id else None
                 uid = u['id'] if u else None
                 cur.execute("""
                 SELECT p.*, u.name as author_name, u.handle as author_handle, u.avatar as author_avatar, u.motto as author_motto,
@@ -2124,11 +2211,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 9. GET /api/posts/saved - Current user's bookmarked posts
         if path == '/api/posts/saved':
-            current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-            u = resolve_user(cur, current_id)
+            u = self.require_auth(conn)
             if not u:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             uid = u['id']
             cur.execute("""
@@ -2189,6 +2273,13 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 11. GET /api/system/latest-email - View latest simulated email
         if path == '/api/system/latest-email':
+            client_ip = self.get_client_ip()
+            admin_user_id = self.get_current_user_id()
+            is_admin = self.is_current_user_admin(admin_user_id)
+            if client_ip not in ('127.0.0.1', '::1') and not is_admin:
+                conn.close()
+                self.send_json(403, {"error": "Access to system email outbox is restricted to localhost or platform administrators."})
+                return
             recipient = (query.get('email') and query.get('email')[0] or '').strip().lower()
             if recipient:
                 cur.execute("""
@@ -2211,14 +2302,10 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 12. GET /api/messages - Retrieve private message history with a friend
         if path == '/api/messages':
-            current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-            friend_id = (query.get('friend_id') and query.get('friend_id')[0] or query.get('with_user') and query.get('with_user')[0] or '').strip()
-
-            cur_user = resolve_user(cur, current_id)
+            cur_user = self.require_auth(conn)
             if not cur_user:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to view messages."})
                 return
+            friend_id = (query.get('friend_id') and query.get('friend_id')[0] or query.get('with_user') and query.get('with_user')[0] or '').strip()
 
             if not friend_id:
                 conn.close()
@@ -2274,13 +2361,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 13. GET /api/messages/conversations - List mutual friends with conversation snippets & unread counts
         if path == '/api/messages/conversations':
-            current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-            cur_user = resolve_user(cur, current_id)
+            cur_user = self.require_auth(conn)
             if not cur_user:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
-
             uid = cur_user['id']
             # Find all mutual friends (unique)
             cur.execute("""
@@ -2351,14 +2434,13 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 14. GET /api/messages/unread-count - Total unread message badge count
         if path == '/api/messages/unread-count':
-            current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-            cur_user = resolve_user(cur, current_id)
-            if not cur_user:
+            current_id = self.get_current_user_id()
+            if not current_id:
                 conn.close()
                 self.send_json(200, {"unread_count": 0})
                 return
 
-            cur.execute("SELECT COUNT(*) as total FROM direct_messages WHERE recipient_id = ? AND read = 0", (cur_user['id'],))
+            cur.execute("SELECT COUNT(*) as total FROM direct_messages WHERE recipient_id = ? AND read = 0", (current_id,))
             total = cur.fetchone()['total']
             conn.close()
             self.send_json(200, {"unread_count": total})
@@ -2366,11 +2448,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 15. GET /api/notifications - User notifications (mentions, post tags, friend activities)
         if path == '/api/notifications':
-            current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-            u = resolve_user(cur, current_id)
+            u = self.require_auth(conn)
             if not u:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             uid = u['id']
             filter_mode = (query.get('filter') and query.get('filter')[0]) or 'all'
@@ -2400,11 +2479,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 16. GET /api/posts/user-activity - Posts user has participated in (for # tagging autocomplete)
         if path == '/api/posts/user-activity':
-            current_id = self.get_current_user_id() or (query.get('user_id') and query.get('user_id')[0])
-            u = resolve_user(cur, current_id)
+            u = self.require_auth(conn)
             if not u:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             uid = u['id']
             cur.execute("""
@@ -2472,10 +2548,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0a. POST /api/crypto/public-key - Register E2EE Public Key
         if path == '/api/crypto/public-key':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to publish E2EE key."})
                 return
             public_key = data.get('public_key')
             if not public_key:
@@ -2494,10 +2568,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0b. POST /api/collectives - Create a Democratic Collective or Guild
         if path == '/api/collectives':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in to create a collective."})
                 return
             name = (data.get('name') or '').strip()
             description = (data.get('description') or '').strip()
@@ -2536,10 +2608,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0c. POST /api/collectives/join - Join or Leave a Collective
         if path == '/api/collectives/join':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in."})
                 return
             collective_id = data.get('collective_id')
             cur.execute("SELECT * FROM collectives WHERE id = ?", (collective_id,))
@@ -2573,10 +2643,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0d. POST /api/collectives/donate-karma - Donate Karma to Collective Treasury
         if path == '/api/collectives/donate-karma':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in."})
                 return
             collective_id = data.get('collective_id')
             amount = max(1, int(data.get('amount') or 5))
@@ -2600,13 +2668,21 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0e. POST /api/lounges/create - Create a Custom Public or Private Hearth
         if path == '/api/lounges/create':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in to create a Hearth."})
                 return
             
             name = (data.get('name') or '').strip()
+            topic_raw = (data.get('topic') or '').strip()
+            is_civil, flagged_snippet = check_civility(f"{name} {topic_raw}")
+            if not is_civil:
+                conn.close()
+                self.send_json(400, {
+                    "error": f"Hearth details blocked by Auto-Moderation: Targeted personal attack detected (\"{flagged_snippet}\").",
+                    "moderated": True,
+                    "flagged_snippet": flagged_snippet
+                })
+                return
             if not name or len(name) < 2:
                 conn.close()
                 self.send_json(400, {"error": "Hearth name is required (minimum 2 characters)."})
@@ -2687,10 +2763,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0e-2. POST /api/lounges/join-by-passcode - Join Private Hearth via Passcode or PIN
         if path == '/api/lounges/join-by-passcode':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in to enter a private Hearth."})
                 return
             
             code = (data.get('passcode') or '').strip().lower()
@@ -2743,10 +2817,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0e-3. POST /api/lounges/join - Join a Fireside Hearth Live Room
         if path == '/api/lounges/join':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in to join a Hearth."})
                 return
             lounge_id = data.get('lounge_id') or 'hearth-solidarity'
             if lounge_id not in FIRESIDE_HEARTHS:
@@ -2793,7 +2865,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0f. POST /api/lounges/leave - Leave a Hearth
         if path == '/api/lounges/leave':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
+            if not user:
+                return
             if user:
                 for r in FIRESIDE_HEARTHS.values():
                     r['occupants'].pop(user['id'], None)
@@ -2803,10 +2877,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0g. POST /api/lounges/speak - Toggle Mute / Speaking / Reaction in Hearth
         if path == '/api/lounges/speak':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "Unauthorized"})
                 return
             lounge_id = data.get('lounge_id')
             target_room = FIRESIDE_HEARTHS.get(lounge_id)
@@ -2823,10 +2895,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0h. POST /api/lounges/play-track - Drag & Drop Audio Playback for Music Hearths
         if path == '/api/lounges/play-track':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in to share audio."})
                 return
             
             lounge_id = data.get('lounge_id')
@@ -2916,10 +2986,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0i. POST /api/lounges/stop-track - Stop the currently playing audio track
         if path == '/api/lounges/stop-track':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "Unauthorized"})
                 return
             
             lounge_id = data.get('lounge_id')
@@ -2953,10 +3021,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0h. POST /api/lounges/delete - Extinguish/Delete a Hearth Room (Creator or Admin Only)
         if path == '/api/lounges/delete':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'), data.get('admin_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
 
             lounge_id = data.get('lounge_id') or data.get('hearth_id')
@@ -3076,6 +3142,14 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 0b. POST /api/auth/forgot-password - Generate password reset token and dispatch email
         if path == '/api/auth/forgot-password':
+            client_ip = self.get_client_ip()
+            allowed, wait_sec = check_action_rate_limit('reset', client_ip, MAX_RESET_ATTEMPTS, RESET_WINDOW)
+            if not allowed:
+                conn.close()
+                self.send_json(429, {"error": f"Too many password reset requests. Please wait {wait_sec} seconds before trying again."})
+                return
+            record_action_attempt('reset', client_ip, MAX_RESET_ATTEMPTS, RESET_WINDOW)
+
             raw_email = (data.get('email') or '').strip().lower()
             if not raw_email:
                 conn.close()
@@ -3219,10 +3293,22 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 1. POST /api/register - Real User Registration with Bot Assessment
         if path == '/api/register':
+            client_ip = self.get_client_ip()
+            allowed, wait_sec = check_action_rate_limit('register', client_ip, MAX_REGISTER_ATTEMPTS, REGISTER_WINDOW)
+            if not allowed:
+                conn.close()
+                self.send_json(429, {"error": f"Too many accounts registered from this IP. Please wait {wait_sec} seconds before trying again."})
+                return
+
             handle = data.get('handle', '').strip()
             name = data.get('name', '').strip()
             email = data.get('email', '').strip().lower()
             password = data.get('password', '')
+
+            if not password or len(password) < 6:
+                conn.close()
+                self.send_json(400, {"error": "Password must be at least 6 characters long."})
+                return
             phone = data.get('phone', '').strip()
             bio = data.get('bio', '').strip()
             location = data.get('location', '').strip()
@@ -3336,6 +3422,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             created_user.pop('registered_ip', None)
             conn.close()
 
+            # Record registration attempt in rate limiter
+            record_action_attempt('register', client_ip, MAX_REGISTER_ATTEMPTS, REGISTER_WINDOW)
+
             # Issue session for newly registered user
             session_token, expires_at = create_user_session(user_id, client_ip, self.headers.get('User-Agent', ''))
             created_user['session_token'] = session_token
@@ -3354,15 +3443,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 1b. POST /api/users/update - Edit Platform / Profile (Author or Admin Only)
         if path == '/api/users/update':
-            auth_user_id = self.get_current_user_id()
-            if not auth_user_id:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required. Please log in."})
-                return
-            caller = resolve_user(cur, auth_user_id)
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authenticated account not found."})
                 return
 
             is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
@@ -3385,6 +3467,16 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
             name = data.get('name')
             bio = data.get('bio')
+            if bio:
+                is_civil, flagged_snippet = check_civility(bio)
+                if not is_civil:
+                    conn.close()
+                    self.send_json(400, {
+                        "error": f"Bio blocked by Auto-Moderation: Targeted personal attack detected (\"{flagged_snippet}\").",
+                        "moderated": True,
+                        "flagged_snippet": flagged_snippet
+                    })
+                    return
             location = data.get('location')
             privacy = data.get('privacy')
             aesthetic_name = data.get('aesthetic_name')
@@ -3401,7 +3493,18 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             if show_zodiac is not None:
                 show_zodiac = 1 if (show_zodiac is True or show_zodiac == 1 or show_zodiac == '1' or show_zodiac == 'true') else 0
             zodiac_sign = compute_zodiac_sign(dob) if dob else None
-            motto = sanitize_motto(data.get('motto')) if 'motto' in data else None
+            motto_raw = data.get('motto')
+            if motto_raw:
+                is_civil, flagged_snippet = check_civility(motto_raw)
+                if not is_civil:
+                    conn.close()
+                    self.send_json(400, {
+                        "error": f"Motto blocked by Auto-Moderation: Targeted personal attack detected (\"{flagged_snippet}\").",
+                        "moderated": True,
+                        "flagged_snippet": flagged_snippet
+                    })
+                    return
+            motto = sanitize_motto(motto_raw) if 'motto' in data else None
 
             # Admin-only fields: handle, email, is_admin
             new_handle = data.get('handle').strip() if (is_admin and data.get('handle')) else None
@@ -3489,17 +3592,13 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 1c. POST /api/users/swap-avatar - Instant Profile Picture Swapping
         if path == '/api/users/swap-avatar':
-            identifier = self.get_current_user_id() or data.get('user_id')
-            new_avatar = data.get('avatar')
-            if not identifier or not new_avatar:
-                conn.close()
-                self.send_json(400, {"error": "Missing user or avatar"})
-                return
-
-            u = resolve_user(cur, identifier)
+            u = self.require_auth(conn)
             if not u:
+                return
+            new_avatar = data.get('avatar')
+            if not new_avatar:
                 conn.close()
-                self.send_json(404, {"error": "User not found"})
+                self.send_json(400, {"error": "Missing avatar"})
                 return
 
             user_id = u['id']
@@ -3515,17 +3614,13 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 1d. POST /api/users/add-avatar - Upload/Add photo to avatar gallery
         if path == '/api/users/add-avatar':
-            identifier = self.get_current_user_id() or data.get('user_id')
-            avatar_url = data.get('avatar')
-            if not identifier or not avatar_url:
-                conn.close()
-                self.send_json(400, {"error": "Missing user or avatar URL"})
-                return
-
-            u = resolve_user(cur, identifier, self.get_current_user_id(), data.get('user_id'))
+            u = self.require_auth(conn)
             if not u:
+                return
+            avatar_url = data.get('avatar')
+            if not avatar_url:
                 conn.close()
-                self.send_json(404, {"error": "User not found"})
+                self.send_json(400, {"error": "Missing avatar URL"})
                 return
 
             user_id = u['id']
@@ -3541,11 +3636,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 1e. POST /api/users/verify-commons - Upload Selfie & ID for Commons Mutual Aid Posting
         if path == '/api/users/verify-commons':
-            identifier = self.get_current_user_id() or data.get('user_id') or data.get('email')
-            user = resolve_user(cur, identifier, self.get_current_user_id(), data.get('user_id'), data.get('email'), data.get('handle'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(404, {"error": "User account not found for verification."})
                 return
 
             selfie = data.get('selfie')
@@ -3595,11 +3687,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 2. POST /api/posts - Create Dispatch or Guestbook Note with Sub-Topic Scraping
         if path == '/api/posts':
-            author_ident = self.get_current_user_id() or data.get('author_id') or data.get('user_id')
-            author = resolve_user(cur, author_ident)
+            author = self.require_auth(conn)
             if not author:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required. Author account not found."})
                 return
 
             author_id = author['id']
@@ -3747,11 +3836,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 3. POST /api/commons - Publish a Mutual Aid Offer or Request (Requires Commons Verification!)
         if path == '/api/commons':
-            author_ident = self.get_current_user_id() or data.get('author_id')
-            author = resolve_user(cur, author_ident, self.get_current_user_id(), data.get('author_id'))
+            author = self.require_auth(conn)
             if not author:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
 
             # CHECK COMMONS VERIFICATION (Selfie + ID required)
@@ -3768,6 +3854,16 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             category = data.get('category', 'goods')
             title = data.get('title', '').strip()
             desc = data.get('desc', '').strip()
+
+            is_civil, flagged_snippet = check_civility(f"{title} {desc}")
+            if not is_civil:
+                conn.close()
+                self.send_json(400, {
+                    "error": f"Dispatch blocked by Auto-Moderation: Targeted personal attack detected (\"{flagged_snippet}\").",
+                    "moderated": True,
+                    "flagged_snippet": flagged_snippet
+                })
+                return
             location = data.get('location', '')
             image_url = data.get('image_url')
 
@@ -3835,7 +3931,10 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 4. POST /api/admin/insta-ban (ADMIN ONLY) - Perma-ban User & Insta-Ban IP
         if path == '/api/admin/insta-ban':
-            admin_id = self.get_current_user_id()
+            admin = self.require_auth(conn)
+            if not admin:
+                return
+            admin_id = admin['id']
             if not self.is_current_user_admin(admin_id):
                 conn.close()
                 self.send_json(403, {"error": "Admin privilege required."})
@@ -3876,7 +3975,10 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 5. POST /api/admin/toggle-admin (ADMIN ONLY)
         if path == '/api/admin/toggle-admin':
-            admin_id = self.get_current_user_id()
+            admin = self.require_auth(conn)
+            if not admin:
+                return
+            admin_id = admin['id']
             if not self.is_current_user_admin(admin_id):
                 conn.close()
                 self.send_json(403, {"error": "Admin privilege required."})
@@ -3910,7 +4012,10 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 6. POST /api/admin/unban-ip (ADMIN ONLY)
         if path == '/api/admin/unban-ip':
-            admin_id = self.get_current_user_id()
+            admin = self.require_auth(conn)
+            if not admin:
+                return
+            admin_id = admin['id']
             if not self.is_current_user_admin(admin_id):
                 conn.close()
                 self.send_json(403, {"error": "Admin privilege required."})
@@ -3925,7 +4030,9 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 6b. POST /api/admin/users/delete - Permanently Delete User Account (ADMIN ONLY)
         if path == '/api/admin/users/delete':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('admin_id'), data.get('caller_id'), data.get('user_id'))
+            caller = self.require_auth(conn)
+            if not caller:
+                return
             is_admin = bool(caller and (caller.get('is_admin') == 1 or caller['id'] == 'usr-adam'))
             if not is_admin:
                 conn.close()
@@ -3990,10 +4097,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 7. POST /api/friends/request - Send Friend Request
         if path == '/api/friends/request':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'), data.get('requester_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to send friend request."})
                 return
             target = resolve_user(cur, data.get('target_id'), data.get('friend_id'), data.get('handle'))
             if not target:
@@ -4061,10 +4166,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 8. POST /api/friends/respond - Accept or Decline Friend Request
         if path == '/api/friends/respond':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             req_id = data.get('request_id')
             requester_id = data.get('requester_id')
@@ -4105,10 +4208,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 9. POST /api/friends/remove - Unfriend / Cancel Friendship
         if path == '/api/friends/remove':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             friend_id = data.get('friend_id')
             if not friend_id:
@@ -4156,10 +4257,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 12. POST /api/posts/comments - Add Comment to a Topic Post
         if path in ['/api/posts/comments', '/api/posts/comment']:
-            author = resolve_user(cur, self.get_current_user_id(), data.get('author_id'))
+            author = self.require_auth(conn)
             if not author:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to post a comment."})
                 return
             post_id = data.get('post_id')
             text = (data.get('text') or '').strip()
@@ -4229,10 +4328,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 13. POST /api/posts/save - Bookmark / Save Post
         if path == '/api/posts/save':
-            user = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            user = self.require_auth(conn)
             if not user:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to bookmark posts."})
                 return
             post_id = data.get('post_id')
             if not post_id:
@@ -4259,10 +4356,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 14. POST /api/messages - Send a private message to a mutual friend
         if path == '/api/messages':
-            sender = resolve_user(cur, self.get_current_user_id(), data.get('sender_id'))
+            sender = self.require_auth(conn)
             if not sender:
-                conn.close()
-                self.send_json(401, {"error": "You must be logged in to send private messages."})
                 return
 
             recipient_id = data.get('recipient_id')
@@ -4342,10 +4437,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 15. POST /api/notifications/read - Mark notifications as read
         if path == '/api/notifications/read':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             nid = data.get('notification_id') or data.get('id')
             mark_all = bool(data.get('mark_all', False) or data.get('all', False))
@@ -4362,10 +4455,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 15b. POST /api/notifications/clear or /api/notifications/dismiss - Dismiss or clear read notifications
         if path in ['/api/notifications/clear', '/api/notifications/dismiss']:
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
             nid = data.get('notification_id') or data.get('id')
             clear_all_read = bool(data.get('all_read', False) or data.get('all', False) or not nid)
@@ -4382,10 +4473,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 16. POST /api/posts/edit - Edit post content, topic, or visibility (Author or Admin)
         if path == '/api/posts/edit':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to edit post."})
                 return
 
             post_id = data.get('post_id')
@@ -4403,6 +4492,15 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
                 return
 
             new_text = data.get('text', post['text']).strip()
+            is_civil, flagged_snippet = check_civility(new_text)
+            if not is_civil:
+                conn.close()
+                self.send_json(400, {
+                    "error": f"Post edit blocked by Auto-Moderation: Targeted personal attack detected (\"{flagged_snippet}\").",
+                    "moderated": True,
+                    "flagged_snippet": flagged_snippet
+                })
+                return
             raw_interest = data.get('interest', post['interest'] or '').strip()
             if not raw_interest or raw_interest.lower() in ['thought', 'open thought', 'open thought (no topic)', 'none']:
                 new_interest = ''
@@ -4436,10 +4534,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 17. POST /api/posts/delete - Delete a post (Author, Platform Host, or Admin)
         if path == '/api/posts/delete':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'), data.get('admin_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to delete post."})
                 return
 
             post_id = data.get('post_id')
@@ -4478,10 +4574,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 18. POST /api/posts/comments/delete - Delete comment (Author, Post Host, or Admin)
         if path in ['/api/posts/comments/delete', '/api/posts/comment/delete']:
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'), data.get('admin_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
 
             comment_id = data.get('comment_id')
@@ -4515,10 +4609,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 19. POST /api/posts/flag - Flag post as off-topic (3 flags escalates to admin)
         if path == '/api/posts/flag':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required to flag posts."})
                 return
 
             post_id = data.get('post_id')
@@ -4580,10 +4672,8 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
 
         # 20. POST /api/posts/change-topic - Change post topic (Original Poster or Admin, clears flags)
         if path == '/api/posts/change-topic':
-            caller = resolve_user(cur, self.get_current_user_id(), data.get('user_id'))
+            caller = self.require_auth(conn)
             if not caller:
-                conn.close()
-                self.send_json(401, {"error": "Authentication required."})
                 return
 
             post_id = data.get('post_id')

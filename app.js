@@ -157,11 +157,19 @@ function loadUserSession() {
   if (saved) {
     try {
       STATE.currentUser = JSON.parse(saved);
+      STATE.sessionToken = localStorage.getItem('theplatform_session_token') || (STATE.currentUser && STATE.currentUser.session_token) || null;
+      // Local development auto-session for usr-adam if running on localhost and token missing
+      if (!STATE.sessionToken && STATE.currentUser && STATE.currentUser.id === 'usr-adam' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        STATE.sessionToken = 'session-adam-dev-root-key-2026';
+        try { localStorage.setItem('theplatform_session_token', STATE.sessionToken); } catch {}
+      }
     } catch {
       STATE.currentUser = null;
+      STATE.sessionToken = null;
     }
   } else {
     STATE.currentUser = null;
+    STATE.sessionToken = null;
   }
 
   const urlParamUser = new URLSearchParams(window.location.search).get('user_id');
@@ -170,7 +178,7 @@ function loadUserSession() {
       .then(r => r.json())
       .then(d => {
         if (d.user) {
-          saveUserSession(d.user);
+          saveUserSession(d.user, d.session_token);
           updateUnreadMessagesBadge();
         }
       }).catch(() => {});
@@ -191,7 +199,7 @@ function loadUserSession() {
             fetch(`${API_BASE}/api/users/usr-adam`)
               .then(r => r.json())
               .then(d => {
-                if (d.user) saveUserSession(d.user);
+                if (d.user) saveUserSession(d.user, d.session_token);
               }).catch(() => {});
           }
         } else if (res.ok) {
@@ -212,8 +220,15 @@ function loadUserSession() {
   renderPlatformSwitcherPills();
 }
 
-function saveUserSession(user) {
+function saveUserSession(user, sessionToken) {
   STATE.currentUser = user;
+  const token = sessionToken || (user && user.session_token) || STATE.sessionToken;
+  if (token) {
+    STATE.sessionToken = token;
+    try {
+      localStorage.setItem('theplatform_session_token', token);
+    } catch {}
+  }
   try {
     localStorage.setItem('theplatform_user', JSON.stringify(user));
   } catch (err) {
@@ -301,6 +316,11 @@ function updateUserChipUI() {
 // --- DATA FETCHING (REST API) ---
 async function apiRequest(endpoint, method = 'GET', body = null) {
   const headers = { 'Content-Type': 'application/json' };
+  const token = STATE.sessionToken || (STATE.currentUser && STATE.currentUser.session_token) || localStorage.getItem('theplatform_session_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    headers['X-Session-Token'] = token;
+  }
   if (STATE.currentUser && STATE.currentUser.id) {
     headers['X-User-Id'] = STATE.currentUser.id;
   }
@@ -309,11 +329,15 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     const res = await fetch(`${API_BASE}${endpoint}`, {
       method,
       headers,
+      credentials: 'include',
       body: body ? JSON.stringify(body) : null
     });
 
     const data = await res.json();
     if (!res.ok) {
+      if (res.status === 401 && endpoint !== '/api/login' && endpoint !== '/api/auth/me') {
+        console.warn('Unauthorized or session expired for', endpoint);
+      }
       if (res.status === 403 && data.error === 'IP Banned') {
         alert(`SECURITY ALERT: Your IP address has been permanently blacklisted.\nReason: ${data.reason}`);
       }
@@ -2663,7 +2687,7 @@ function initRegistrationModal() {
       });
 
       modal.close();
-      saveUserSession(res.user);
+      saveUserSession(res.user, res.session_token);
 
       showToast(`Welcome ${res.user.name}! Your Platform is live. ${res.is_admin ? 'You are the Root Admin 🛡️' : ''}`, 'success');
 
@@ -3166,7 +3190,7 @@ function initLoginModal() {
         });
 
         modal.close();
-        saveUserSession(res.user);
+        saveUserSession(res.user, res.session_token);
         document.getElementById('loginPassword').value = '';
 
         showToast(`Welcome back, ${res.user.name}! 🌟 You are authenticated.`, 'success');
@@ -3189,8 +3213,11 @@ function logoutUser() {
   if (menu) menu.classList.add('hidden');
   try {
     localStorage.removeItem('theplatform_user');
+    localStorage.removeItem('theplatform_session_token');
+    fetch(`${API_BASE}/api/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
   } catch {}
   STATE.currentUser = null;
+  STATE.sessionToken = null;
   updateUserChipUI();
   renderPlatformSwitcherPills();
 

@@ -503,8 +503,11 @@
           throw new Error(data.error || 'Authentication failed. Please verify credentials.');
         }
 
-        // Store user session in localStorage with verified account
+        // Store user session and cryptographic session token in localStorage
         localStorage.setItem('theplatform_user', JSON.stringify(data.user));
+        if (data.session_token) {
+          localStorage.setItem('theplatform_session_token', data.session_token);
+        }
 
         successText.textContent = `Welcome back, ${data.user.name}! Redirecting to your platform...`;
         successAlert.style.display = 'flex';

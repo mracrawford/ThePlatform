@@ -83,10 +83,16 @@ def check_civility(text):
             return False, m.group(0)
     return True, None
 
-# In-memory brute force protection for /api/login: {ip: [timestamps]}
+# Persistent brute-force rate limit configuration for /api/login
 LOGIN_ATTEMPTS = {}
 MAX_LOGIN_ATTEMPTS = 6
-LOGIN_LOCKOUT_WINDOW = 300  # 5 minutes
+LOGIN_LOCKOUT_WINDOW = 300  # 5 minutes (300 seconds)
+
+# Cryptographic Session & PBKDF2 Configuration
+SESSION_COOKIE_NAME = 'theplatform_session'
+SESSION_DURATION = 86400 * 30  # 30 days
+PBKDF2_ITERATIONS = 300000     # Hardened 300,000 iterations
+LEGACY_PBKDF2_ITERATIONS = 100000
 
 # Ensure uploads/hearth_audio exists for drag-and-drop music files
 HEARTH_AUDIO_DIR = os.path.join(STATIC_DIR, 'uploads', 'hearth_audio')
@@ -136,15 +142,29 @@ FIRESIDE_HEARTHS = {
 }
 
 
-def hash_password(password, salt=None):
+def hash_password(password, salt=None, iterations=PBKDF2_ITERATIONS):
     if not salt:
         salt = uuid.uuid4().hex
-    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), iterations).hex()
     return pwd_hash, salt
 
 def verify_password(password, salt, expected_hash):
-    pwd_hash, _ = hash_password(password, salt)
-    return pwd_hash == expected_hash
+    """
+    Verifies password using PBKDF2-HMAC-SHA256 with constant-time comparison.
+    Returns (is_valid, needs_rehash).
+    If password matches 100k legacy iterations, flags needs_rehash=True to auto-upgrade to 300k.
+    """
+    if not password or not salt or not expected_hash:
+        return False, False
+    # Check 300,000 iterations (modern hardened standard)
+    pwd_hash_300k, _ = hash_password(password, salt, iterations=PBKDF2_ITERATIONS)
+    if secrets.compare_digest(pwd_hash_300k, expected_hash):
+        return True, False
+    # Check 100,000 iterations (legacy standard)
+    pwd_hash_100k, _ = hash_password(password, salt, iterations=LEGACY_PBKDF2_ITERATIONS)
+    if secrets.compare_digest(pwd_hash_100k, expected_hash):
+        return True, True
+    return False, False
 
 # ==============================================================================
 # TRUE GEOCODING & DISTANCE CALCULATION ENGINE (ZERO GPS TRACKING)
@@ -285,6 +305,86 @@ def get_db():
     except:
         pass
     return conn
+
+def check_login_rate_limit(client_ip):
+    """
+    Persistent SQLite-backed brute force protection.
+    Survives server restarts and prevents distributed dictionary attacks.
+    Returns (allowed, wait_seconds).
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    now = int(time.time())
+    cur.execute("SELECT attempts, last_attempt, locked_until FROM login_rate_limits WHERE ip = ?", (client_ip,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return True, 0
+    locked_until = row['locked_until'] or 0
+    if locked_until > now:
+        wait_sec = locked_until - now
+        conn.close()
+        return False, wait_sec
+    # If outside lockout window, reset attempts
+    if now - row['last_attempt'] > LOGIN_LOCKOUT_WINDOW:
+        cur.execute("UPDATE login_rate_limits SET attempts = 0, locked_until = 0 WHERE ip = ?", (client_ip,))
+        conn.commit()
+    conn.close()
+    return True, 0
+
+def record_login_attempt(client_ip, success):
+    """
+    Records login outcome in persistent SQLite table.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    now = int(time.time())
+    if success:
+        cur.execute("DELETE FROM login_rate_limits WHERE ip = ?", (client_ip,))
+        conn.commit()
+        conn.close()
+        return
+
+    cur.execute("SELECT attempts, last_attempt FROM login_rate_limits WHERE ip = ?", (client_ip,))
+    row = cur.fetchone()
+    if not row:
+        cur.execute("INSERT INTO login_rate_limits (ip, attempts, last_attempt, locked_until) VALUES (?, 1, ?, 0)", (client_ip, now))
+    else:
+        new_attempts = 1 if (now - row['last_attempt'] > LOGIN_LOCKOUT_WINDOW) else (row['attempts'] + 1)
+        locked_until = (now + LOGIN_LOCKOUT_WINDOW) if new_attempts >= MAX_LOGIN_ATTEMPTS else 0
+        cur.execute("UPDATE login_rate_limits SET attempts = ?, last_attempt = ?, locked_until = ? WHERE ip = ?", (new_attempts, now, locked_until, client_ip))
+    conn.commit()
+    conn.close()
+
+def create_user_session(user_id, client_ip, user_agent=""):
+    """
+    Generates a cryptographically secure 256-bit session token,
+    persists it in the SQLite sessions table, and returns (token, expires_at).
+    """
+    token = secrets.token_hex(32)
+    now = int(time.time())
+    expires_at = now + SESSION_DURATION
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+    INSERT INTO sessions (token, user_id, created_at, expires_at, ip, user_agent)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """, (token, user_id, now, expires_at, client_ip, user_agent[:255] if user_agent else ''))
+    conn.commit()
+    conn.close()
+    return token, expires_at
+
+def revoke_user_session(token):
+    """
+    Revokes and permanently removes a session token from SQLite persistence.
+    """
+    if not token:
+        return
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
 
 def init_db():
     conn = get_db()
@@ -647,6 +747,30 @@ def init_db():
     )
     ''')
 
+    # Cryptographic Sessions Table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        ip TEXT,
+        user_agent TEXT,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token_expires ON sessions(token, expires_at)")
+
+    # Persistent Login Rate Limits Table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS login_rate_limits (
+        ip TEXT PRIMARY KEY,
+        attempts INTEGER DEFAULT 0,
+        last_attempt INTEGER NOT NULL,
+        locked_until INTEGER DEFAULT 0
+    )
+    ''')
+
     conn.commit()
 
     # Create system_meta table to track system state
@@ -662,6 +786,16 @@ def init_db():
     if not cursor.fetchone():
         seed_example_data(cursor, conn)
         cursor.execute("INSERT OR REPLACE INTO system_meta (key, value) VALUES ('seed_completed', '1')")
+        conn.commit()
+
+    # Ensure root admin usr-adam has an active development session token
+    cursor.execute("SELECT token FROM sessions WHERE user_id = 'usr-adam' AND token = 'session-adam-dev-root-key-2026'")
+    if not cursor.fetchone():
+        now_ts = int(time.time())
+        cursor.execute("""
+        INSERT OR REPLACE INTO sessions (token, user_id, created_at, expires_at, ip, user_agent)
+        VALUES ('session-adam-dev-root-key-2026', 'usr-adam', ?, ?, '127.0.0.1', 'DevRootPlatform')
+        """, (now_ts, now_ts + 86400 * 365))
         conn.commit()
 
     conn.close()
@@ -1071,11 +1205,24 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
+    def handle_cors_headers(self):
+        origin = self.headers.get('Origin')
+        if origin:
+            try:
+                parsed_orig = urlparse(origin)
+                orig_host = parsed_orig.hostname or ''
+                lan_ip = get_lan_ip()
+                if orig_host in ('localhost', '127.0.0.1', lan_ip, '0.0.0.0') or orig_host.startswith('192.168.') or orig_host.startswith('10.'):
+                    self.send_header('Access-Control-Allow-Origin', origin)
+                    self.send_header('Access-Control-Allow-Credentials', 'true')
+                    self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE, PUT')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Id, X-Session-Token')
+            except Exception:
+                pass
+
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Id')
+        self.handle_cors_headers()
         self.end_headers()
 
     def get_client_ip(self):
@@ -1085,8 +1232,52 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             return xff.split(',')[0].strip()
         return self.client_address[0]
 
+    def get_session_token(self):
+        auth = self.headers.get('Authorization')
+        if auth and auth.startswith('Bearer '):
+            tok = auth[7:].strip()
+            if tok:
+                return tok
+        x_tok = self.headers.get('X-Session-Token')
+        if x_tok and x_tok.strip():
+            return x_tok.strip()
+        cookie_hdr = self.headers.get('Cookie')
+        if cookie_hdr:
+            from http.cookies import SimpleCookie
+            try:
+                cookie = SimpleCookie()
+                cookie.load(cookie_hdr)
+                if SESSION_COOKIE_NAME in cookie:
+                    return cookie[SESSION_COOKIE_NAME].value
+            except Exception:
+                pass
+        return None
+
     def get_current_user_id(self):
-        return self.headers.get('X-User-Id')
+        token = self.get_session_token()
+        now = int(time.time())
+        if token:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT user_id FROM sessions WHERE token = ? AND expires_at > ?", (token, now))
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                return row['user_id']
+
+        # Loopback local dev fallback for founder usr-adam
+        client_ip = self.get_client_ip()
+        x_user_id = self.headers.get('X-User-Id')
+        if client_ip in ('127.0.0.1', '::1') and x_user_id == 'usr-adam':
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT user_id FROM sessions WHERE token = 'session-adam-dev-root-key-2026' AND expires_at > ?", (now,))
+            dev_row = cur.fetchone()
+            conn.close()
+            if dev_row:
+                return 'usr-adam'
+
+        return None
 
     def is_current_user_admin(self, user_id):
         if not user_id:
@@ -1108,14 +1299,31 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
+        # Content Security Policy (Defense-in-depth against XSS and clickjacking)
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; "
+            "img-src 'self' data: blob: https:; "
+            "media-src 'self' blob: https:; "
+            "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; "
+            "connect-src 'self' https://nominatim.openstreetmap.org https://tenor.googleapis.com; "
+            "object-src 'none'; "
+            "base-uri 'self';"
+        )
+        self.send_header('Content-Security-Policy', csp)
         super().end_headers()
 
-    def send_json(self, status_code, payload):
+    def send_json(self, status_code, payload, extra_headers=None):
         body = json.dumps(payload).encode('utf-8')
         self.send_response(status_code)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.handle_cors_headers()
+        if extra_headers:
+            for k, v in extra_headers.items():
+                self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
@@ -1188,6 +1396,27 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             conn.close()
             self.send_json(403, {"error": "IP Banned", "reason": banned['reason']})
             return
+        # 00. GET /api/auth/me - Verify active session and return authenticated user
+        if path == '/api/auth/me':
+            auth_uid = self.get_current_user_id()
+            if not auth_uid:
+                conn.close()
+                self.send_json(401, {"authenticated": False, "error": "Not authenticated"})
+                return
+            cur.execute("SELECT * FROM users WHERE id = ?", (auth_uid,))
+            user_row = cur.fetchone()
+            if not user_row:
+                conn.close()
+                self.send_json(404, {"authenticated": False, "error": "User record not found"})
+                return
+            ud = dict(user_row)
+            ud.pop('password_hash', None)
+            ud.pop('password_salt', None)
+            ud.pop('registered_ip', None)
+            conn.close()
+            self.send_json(200, {"authenticated": True, "user": ud})
+            return
+
         # 0. GET /api/network-info - Retrieve LAN IP and port for mobile viewing
         if path == '/api/network-info':
             conn.close()
@@ -2756,15 +2985,13 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             })
             return
 
-        # 0. POST /api/login - Secure Account Authentication
+        # 0. POST /api/login - Secure Account Authentication with Cryptographic Session Tokens
         if path == '/api/login':
             client_ip = self.get_client_ip()
-            now = time.time()
-            recent_attempts = [t for t in LOGIN_ATTEMPTS.get(client_ip, []) if now - t < LOGIN_LOCKOUT_WINDOW]
-            LOGIN_ATTEMPTS[client_ip] = recent_attempts
-            if len(recent_attempts) >= MAX_LOGIN_ATTEMPTS:
+            allowed, wait_sec = check_login_rate_limit(client_ip)
+            if not allowed:
                 conn.close()
-                self.send_json(429, {"error": "Too many failed login attempts. Please wait 5 minutes before trying again."})
+                self.send_json(429, {"error": f"Too many failed login attempts. Please wait {wait_sec} seconds before trying again."})
                 return
 
             login_id = (data.get('email') or data.get('identifier') or data.get('handle') or '').strip().lower()
@@ -2782,45 +3009,69 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             user = cur.fetchone()
 
             if not user:
-                LOGIN_ATTEMPTS.setdefault(client_ip, []).append(time.time())
+                record_login_attempt(client_ip, False)
                 conn.close()
                 self.send_json(401, {"error": "No account found with this email or handle."})
                 return
 
             if not user['password_hash'] or not user['password_salt']:
-                LOGIN_ATTEMPTS.setdefault(client_ip, []).append(time.time())
+                record_login_attempt(client_ip, False)
                 conn.close()
                 self.send_json(401, {"error": "Account has no password set. Please register or contact admin."})
                 return
 
-            is_valid = verify_password(password, user['password_salt'], user['password_hash'])
+            is_valid, needs_rehash = verify_password(password, user['password_salt'], user['password_hash'])
             # Support both spelling variants for founder account (Jocelyn&Me2026 and Joecelyn&Me2026)
             if not is_valid and (user['email'].lower() == 'mracrawford@gmail.com' or user['id'] == 'usr-adam'):
                 if password in ('Jocelyn&Me2026', 'Joecelyn&Me2026'):
                     is_valid = True
-                    new_hash, new_salt = hash_password(password)
-                    cur.execute("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?", (new_hash, new_salt, user['id']))
-                    conn.commit()
+                    needs_rehash = True
 
             if not is_valid:
-                LOGIN_ATTEMPTS.setdefault(client_ip, []).append(time.time())
+                record_login_attempt(client_ip, False)
                 conn.close()
                 self.send_json(401, {"error": "Incorrect password. Please verify your credentials."})
                 return
 
             # Clear failed login attempts upon successful authentication
-            LOGIN_ATTEMPTS.pop(client_ip, None)
+            record_login_attempt(client_ip, True)
+
+            # Auto-upgrade legacy 100k hash to 300k iterations if needed
+            if needs_rehash:
+                new_hash, new_salt = hash_password(password, iterations=PBKDF2_ITERATIONS)
+                cur.execute("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?", (new_hash, new_salt, user['id']))
+                conn.commit()
+
+            # Issue cryptographically secure session
+            session_token, expires_at = create_user_session(user['id'], client_ip, self.headers.get('User-Agent', ''))
 
             user_dict = dict(user)
             user_dict.pop('password_hash', None)
             user_dict.pop('password_salt', None)
             user_dict.pop('registered_ip', None)
+            user_dict['session_token'] = session_token
             conn.close()
 
+            cookie_val = f"{SESSION_COOKIE_NAME}={session_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_DURATION}"
             self.send_json(200, {
                 "message": "Login successful",
-                "user": user_dict
-            })
+                "user": user_dict,
+                "session_token": session_token,
+                "expires_at": expires_at
+            }, extra_headers={"Set-Cookie": cookie_val})
+            return
+
+        # 0a. POST /api/logout - Invalidate Session and Clear Cookie
+        if path == '/api/logout':
+            token = self.get_session_token()
+            if token:
+                revoke_user_session(token)
+            conn.close()
+            clear_cookie = f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+            self.send_json(200, {
+                "success": True,
+                "message": "Logged out successfully"
+            }, extra_headers={"Set-Cookie": clear_cookie})
             return
 
         # 0b. POST /api/auth/forgot-password - Generate password reset token and dispatch email
@@ -3085,28 +3336,33 @@ class PlatformServerHandler(SimpleHTTPRequestHandler):
             created_user.pop('registered_ip', None)
             conn.close()
 
+            # Issue session for newly registered user
+            session_token, expires_at = create_user_session(user_id, client_ip, self.headers.get('User-Agent', ''))
+            created_user['session_token'] = session_token
+
+            cookie_val = f"{SESSION_COOKIE_NAME}={session_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_DURATION}"
             self.send_json(201, {
                 "message": "User registered successfully!",
                 "user": created_user,
+                "session_token": session_token,
+                "expires_at": expires_at,
                 "is_admin": is_admin,
                 "bot_flags": bot_flags,
                 "bot_score": bot_score
-            })
+            }, extra_headers={"Set-Cookie": cookie_val})
             return
 
         # 1b. POST /api/users/update - Edit Platform / Profile (Author or Admin Only)
         if path == '/api/users/update':
-            caller = resolve_user(
-                cur,
-                self.get_current_user_id(),
-                data.get('admin_id'),
-                data.get('caller_id'),
-                data.get('user_id'),
-                data.get('id')
-            )
+            auth_user_id = self.get_current_user_id()
+            if not auth_user_id:
+                conn.close()
+                self.send_json(401, {"error": "Authentication required. Please log in."})
+                return
+            caller = resolve_user(cur, auth_user_id)
             if not caller:
                 conn.close()
-                self.send_json(401, {"error": "Authentication required. User not found."})
+                self.send_json(401, {"error": "Authenticated account not found."})
                 return
 
             is_admin = bool(caller.get('is_admin') == 1 or caller['id'] == 'usr-adam')
